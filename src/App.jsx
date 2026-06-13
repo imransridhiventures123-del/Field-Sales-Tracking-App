@@ -15,6 +15,8 @@ import UploadPhotosPage  from "./pages/UploadPhotosPage";
 import VisitSummaryPage  from "./pages/VisitSummaryPage";
 import MyVisitsPage      from "./pages/MyVisitsPage";
 import VisitDetailPage   from "./pages/VisitDetailPage";
+import FollowUpPage from "./pages/FollowUpPage";
+import PerformanceLedger from "./pages/PerformanceLedger";
 
 export default function App() {
   return (
@@ -35,8 +37,9 @@ export default function App() {
             <Route path="/visit-summary"   element={<PrivateRoute><VisitSummaryPage /></PrivateRoute>} />
             <Route path="/my-visits"       element={<PrivateRoute><MyVisitsPage /></PrivateRoute>} />
             <Route path="/visit-detail/:id" element={<PrivateRoute><VisitDetailPage /></PrivateRoute>} />
-
+            <Route path="/performance" element={<PerformanceLedger />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route path="/followups" element={<FollowUpPage />} />
           </Routes>
           <BottomNav />
         </VisitProvider>

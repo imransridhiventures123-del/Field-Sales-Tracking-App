@@ -324,7 +324,7 @@ export default function DashboardPage() {
                     <p className="text-green-200 text-[10px] mt-0.5">
                       ±{currentLocation.accuracy}m accuracy
                     </p>
-                  )}
+                  )} 
                 </>
               ) : (
                 <>
@@ -474,21 +474,26 @@ export default function DashboardPage() {
             <p className="text-gray-800 font-semibold text-sm">Daily Target</p>
             <p className="text-gray-400 text-xs mt-0.5">Track progress</p>
           </button>
-
-          <button onClick={() => navigate("/profile")}
-            className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
-            <div className="w-11 h-11 rounded-xl overflow-hidden border border-gray-100 mb-2 flex-shrink-0">
-              {user?.photo ? (
-                <img src={user.photo} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xs">
-                  {initials}
-                </div>
-              )}
-            </div>
-            <p className="text-gray-800 font-semibold text-sm">Profile</p>
-            <p className="text-gray-400 text-xs mt-0.5">Your account</p>
-          </button>
+           <button onClick={() => navigate("/performance")}
+           className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
+           <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center mb-3">
+           <svg className="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+    </svg>
+  </div>
+  <p className="text-gray-800 font-semibold text-sm">Performance</p>
+  <p className="text-gray-400 text-xs mt-0.5">Revenue ledger</p>
+</button>
+          <button onClick={() => navigate("/followups")}
+  className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
+  <div className="w-9 h-9 bg-red-50 rounded-xl flex items-center justify-center mb-3">
+    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+    </svg>
+  </div>
+  <p className="text-gray-800 font-semibold text-sm">Follow-ups</p>
+  <p className="text-gray-400 text-xs mt-0.5">6 pending</p>
+</button>
         </div>
 
         {/* Recent Visits */}

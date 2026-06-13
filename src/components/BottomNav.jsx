@@ -34,6 +34,16 @@ const TABS = [
     ),
   },
   {
+    label: "Follow-ups",
+    path: "/followups",
+    badge: 2, // overdue count — replace with real count later
+    icon: (active) => (
+      <svg className={`w-6 h-6 ${active ? "text-red-500" : "text-gray-400"}`} fill={active ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={active ? 0 : 2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+    ),
+  },
+  {
     label: "Profile",
     path: "/profile",
     icon: (active) => (
@@ -59,20 +69,27 @@ export default function BottomNav() {
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-50">
       <div className="flex items-center justify-around px-2 py-2 max-w-lg mx-auto">
         {TABS.map((tab) => {
-          const active = path === tab.path;
-          return (
-            <button
-              key={tab.path}
-              onClick={() => navigate(tab.path)}
-              className="flex flex-col items-center gap-1 px-4 py-1 rounded-xl transition active:scale-90"
-            >
-              {tab.icon(active)}
-              <span className={`text-[10px] font-medium ${active ? "text-blue-600" : "text-gray-400"}`}>
-                {tab.label}
-              </span>
-            </button>
-          );
-        })}
+  const active = path === tab.path;
+  return (
+    <button
+      key={tab.path}
+      onClick={() => navigate(tab.path)}
+      className="flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition active:scale-90 relative"
+    >
+      <div className="relative">
+        {tab.icon(active)}
+        {tab.badge > 0 && (
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+            {tab.badge}
+          </span>
+        )}
+      </div>
+      <span className={`text-[10px] font-medium ${active ? (tab.path === "/followups" ? "text-red-500" : "text-blue-600") : "text-gray-400"}`}>
+        {tab.label}
+      </span>
+    </button>
+  );
+})}
       </div>
     </div>
   );
