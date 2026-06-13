@@ -8,6 +8,10 @@ import MyVisitsPage from './pages/MyVisitsPage';
 import VisitDetailPage from './pages/VisitDetailPage';
 import DashboardPage from './pages/DashboardPage';
 import BottomNav from './components/BottomNav';
+import ProfilePage from './pages/ProfilePage';
+import DailyTargetPage from './pages/DailyTargetPage';
+
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -21,6 +25,8 @@ export default function App() {
           <Route path="/my-visits" element={<MyVisitsPage />} />
           <Route path="/visit-detail/:id" element={<VisitDetailPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/daily-target" element={<DailyTargetPage />} />
         </Routes>
         <BottomNav />
       </VisitProvider>
