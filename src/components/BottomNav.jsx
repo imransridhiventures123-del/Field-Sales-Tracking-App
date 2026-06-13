@@ -1,7 +1,5 @@
 // FILE: src/components/BottomNav.jsx
 // OWNER: Imran
-// PURPOSE: Fixed bottom tab bar — Home, Visits, Target, Profile
-// Only shows when user is logged in (not on login page)
 
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -44,15 +42,22 @@ const TABS = [
   },
 ];
 
-// Pages where BottomNav should NOT appear
-const HIDDEN_ON = ["/login", "/register", "/visit-shop", "/prove-location", "/upload-photos", "/visit-summary"];
+// BottomNav is HIDDEN on these pages
+const HIDDEN_ON = [
+  "/login",
+  "/register",
+  "/visit-shop",
+  "/prove-location",
+  "/upload-photos",
+  "/visit-summary",
+  "/end-of-day",       // ← ADDED
+];
 
 export default function BottomNav() {
-  const navigate  = useNavigate();
-  const location  = useLocation();
-  const path      = location.pathname;
+  const navigate = useNavigate();
+  const location = useLocation();
+  const path     = location.pathname;
 
-  // Hide on login and visit flow pages
   if (HIDDEN_ON.some((p) => path.startsWith(p))) return null;
 
   return (

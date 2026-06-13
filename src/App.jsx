@@ -1,20 +1,21 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider }  from "./context/AuthContext";
 import { VisitProvider } from "./context/VisitContext";
-import PrivateRoute from "./components/PrivateRoute";
-import BottomNav from "./components/BottomNav";
+import PrivateRoute      from "./components/PrivateRoute";
+import BottomNav         from "./components/BottomNav";
 
-import LoginPage      from "./pages/LoginPage";
-import RegisterPage   from "./pages/RegisterPage";
-import DashboardPage  from "./pages/DashboardPage";
-import DailyTargetPage from "./pages/DailyTargetPage";
-import ProfilePage    from "./pages/ProfilePage";
-import VisitShopPage  from "./pages/VisitShopPage";
-import ProveLocationPage from "./pages/ProveLocationPage";
-import UploadPhotosPage  from "./pages/UploadPhotosPage";
-import VisitSummaryPage  from "./pages/VisitSummaryPage";
-import MyVisitsPage      from "./pages/MyVisitsPage";
-import VisitDetailPage   from "./pages/VisitDetailPage";
+import LoginPage          from "./pages/LoginPage";
+import RegisterPage       from "./pages/RegisterPage";
+import DashboardPage      from "./pages/DashboardPage";
+import DailyTargetPage    from "./pages/DailyTargetPage";
+import ProfilePage        from "./pages/ProfilePage";
+import VisitShopPage      from "./pages/VisitShopPage";
+import ProveLocationPage  from "./pages/ProveLocationPage";
+import UploadPhotosPage   from "./pages/UploadPhotosPage";
+import VisitSummaryPage   from "./pages/VisitSummaryPage";
+import EndOfDayPage       from "./pages/EndOfDayPage";
+import MyVisitsPage       from "./pages/MyVisitsPage";
+import VisitDetailPage    from "./pages/VisitDetailPage";
 
 export default function App() {
   return (
@@ -29,11 +30,15 @@ export default function App() {
             <Route path="/dashboard"    element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
             <Route path="/daily-target" element={<PrivateRoute><DailyTargetPage /></PrivateRoute>} />
             <Route path="/profile"      element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
-            <Route path="/visit-shop"      element={<PrivateRoute><VisitShopPage /></PrivateRoute>} />
-            <Route path="/prove-location"  element={<PrivateRoute><ProveLocationPage /></PrivateRoute>} />
-            <Route path="/upload-photos"   element={<PrivateRoute><UploadPhotosPage /></PrivateRoute>} />
-            <Route path="/visit-summary"   element={<PrivateRoute><VisitSummaryPage /></PrivateRoute>} />
-            <Route path="/my-visits"       element={<PrivateRoute><MyVisitsPage /></PrivateRoute>} />
+
+            {/* Visit flow — Step 1 → 2 → 3 → Summary → End of Day */}
+            <Route path="/visit-shop"     element={<PrivateRoute><VisitShopPage /></PrivateRoute>} />
+            <Route path="/prove-location" element={<PrivateRoute><ProveLocationPage /></PrivateRoute>} />
+            <Route path="/upload-photos"  element={<PrivateRoute><UploadPhotosPage /></PrivateRoute>} />
+            <Route path="/visit-summary"  element={<PrivateRoute><VisitSummaryPage /></PrivateRoute>} />
+            <Route path="/end-of-day"     element={<PrivateRoute><EndOfDayPage /></PrivateRoute>} />
+
+            <Route path="/my-visits"        element={<PrivateRoute><MyVisitsPage /></PrivateRoute>} />
             <Route path="/visit-detail/:id" element={<PrivateRoute><VisitDetailPage /></PrivateRoute>} />
 
             <Route path="*" element={<Navigate to="/login" replace />} />
