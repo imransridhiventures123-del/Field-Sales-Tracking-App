@@ -1,17 +1,37 @@
 // FILE: src/pages/DashboardPage.jsx
-// OWNER: Imran — shows real user name and photo from AuthContext
+// OWNER: Imran
+// NEW FEATURE: Online/Offline toggle with live GPS tracking (Uber/Ola style)
+//
+// HOW IT WORKS:
+//   - Employee taps the toggle → goes ONLINE
+//   - GPS starts tracking every 10 seconds (watchPosition)
+//   - Location is stored in state (later POST to backend)
+//   - Employee taps toggle → tries to go OFFLINE
+//   - Alert popup appears asking them to stay online
+//   - They must confirm twice to go offline
+//   - Admin dashboard reads the live location from backend
+//
+// WHEN BACKEND IS READY:
+//   Search "SEND TO BACKEND" in this file → uncomment those lines
+//   It will POST { lat, lng, timestamp } to /api/location/update
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ShopVisitCard from "../components/ShopVisitCard";
 
-const FAKE_STATS = { todayVisits: 4, weeklyTarget: 30, weeklyDone: 18, totalVisits: 87 };
+// ── FAKE DATA (replace with API later) ──────────────────────
+const FAKE_STATS = {
+  todayVisits: 4,
+  weeklyTarget: 30,
+  weeklyDone: 18,
+  totalVisits: 87,
+};
 
 const FAKE_RECENT = [
-  { _id: "1", shopName: "Annas Provision Store", shopCode: "AP001", ownerName: "Annas", status: "Completed", categories: ["Grocery", "Provisions"], photos: [1, 2], createdAt: new Date().toISOString() },
-  { _id: "2", shopName: "Big Bazaar", shopCode: "BB001", ownerName: "Ravi", status: "Pending", categories: ["Beverages"], photos: [1], createdAt: new Date(Date.now() - 3600000).toISOString() },
-  { _id: "3", shopName: "Sri Murugan Stores", shopCode: "SM001", ownerName: "Murugan", status: "Rejected", categories: ["Grocery"], photos: [], createdAt: new Date(Date.now() - 7200000).toISOString() },
+  { _id: "1", shopName: "Annas Provision Store", shopCode: "AP001", ownerName: "Annas", fieldType: "Field Sales", status: "Completed", followUp: null, photos: [1, 2], createdAt: new Date().toISOString() },
+  { _id: "2", shopName: "Big Bazaar", shopCode: "BB001", ownerName: "Ravi", fieldType: "Collection", status: "Pending", followUp: { needed: true, date: new Date().toISOString().split("T")[0] }, photos: [1], createdAt: new Date(Date.now() - 3600000).toISOString() },
+  { _id: "3", shopName: "Sri Murugan Stores", shopCode: "SM001", ownerName: "Murugan", fieldType: "Field Sales", status: "Rejected", followUp: null, photos: [], createdAt: new Date(Date.now() - 7200000).toISOString() },
 ];
 
 function getGreeting() {
@@ -21,18 +41,79 @@ function getGreeting() {
   return "Good evening";
 }
 
+// ── OFFLINE CONFIRM MODAL ────────────────────────────────────
+// Shows when employee tries to go offline
+// They must tap "Go Offline" to confirm — can't just close
+function OfflineModal({ onConfirm, onCancel }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center px-4 pb-8">
+      <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+        {/* Warning icon */}
+        <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+
+        <h3 className="text-lg font-bold text-gray-900 text-center mb-2">
+          Go Offline?
+        </h3>
+        <p className="text-sm text-gray-500 text-center mb-1">
+          Your manager monitors your live location during work hours.
+        </p>
+        <p className="text-sm text-amber-600 font-medium text-center mb-6">
+          Going offline will stop sharing your location.
+        </p>
+
+        {/* Buttons */}
+        <button
+          onClick={onConfirm}
+          className="w-full py-3.5 bg-red-500 text-white font-semibold rounded-2xl mb-3 active:scale-95 transition"
+        >
+          Go Offline Anyway
+        </button>
+        <button
+          onClick={onCancel}
+          className="w-full py-3.5 bg-blue-600 text-white font-semibold rounded-2xl active:scale-95 transition"
+        >
+          Stay Online ✓
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN DASHBOARD ───────────────────────────────────────────
 export default function DashboardPage() {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
   const { user }  = useAuth();
 
-  const [stats, setStats]           = useState(null);
+  // ── DATA STATE ──
+  const [stats, setStats]             = useState(null);
   const [recentVisits, setRecentVisits] = useState([]);
-  const [loading, setLoading]       = useState(true);
+  const [loading, setLoading]         = useState(true);
 
+  // ── ONLINE/OFFLINE STATE ──
+  const [isOnline, setIsOnline]       = useState(false);
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [locationError, setLocationError]     = useState("");
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
+  const [onlineSince, setOnlineSince] = useState(null);
+
+  // watchPosition ID — we store this to stop tracking when offline
+  const watchIdRef = useRef(null);
+
+  // ── COMPUTED ──
   const firstName = user?.name?.split(" ")[0] || "Employee";
   const initials  = user?.name?.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) || "??";
   const weeklyPct = stats ? Math.round((stats.weeklyDone / stats.weeklyTarget) * 100) : 0;
 
+  // Today's follow-ups
+  const todayFollowups = FAKE_RECENT.filter(
+    (v) => v.followUp?.needed && v.followUp?.date === new Date().toISOString().split("T")[0]
+  );
+
+  // ── LOAD FAKE DATA ──
   useEffect(() => {
     setTimeout(() => {
       setStats(FAKE_STATS);
@@ -41,10 +122,141 @@ export default function DashboardPage() {
     }, 600);
   }, []);
 
+  // ── CLEANUP: stop GPS when component unmounts ──
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  // ── START LOCATION TRACKING ──────────────────────────────
+  // Called when employee taps "Go Online"
+  const startTracking = () => {
+    if (!navigator.geolocation) {
+      setLocationError("GPS not supported on this device.");
+      return;
+    }
+
+    setLocationError("");
+
+    // watchPosition keeps tracking continuously — fires every time location changes
+    // (unlike getCurrentPosition which fires once)
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const locationData = {
+          lat: latitude,
+          lng: longitude,
+          accuracy: Math.round(accuracy),
+          timestamp: new Date().toISOString(),
+        };
+
+        setCurrentLocation(locationData);
+
+        // ── SEND TO BACKEND (uncomment when backend ready) ──
+        // axiosInstance.post("/api/location/update", {
+        //   employeeId: user._id,
+        //   latitude,
+        //   longitude,
+        //   timestamp: locationData.timestamp,
+        // }).catch(console.error);
+        // ── END BACKEND CODE ──
+      },
+      (err) => {
+        // GPS failed — force offline
+        console.error("GPS error:", err);
+        setLocationError("Location access denied. Please allow GPS.");
+        goOfflineForced();
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0, // always get fresh location, never use cached
+      }
+    );
+
+    watchIdRef.current = id;
+    setIsOnline(true);
+    setOnlineSince(new Date());
+  };
+
+  // ── STOP LOCATION TRACKING ───────────────────────────────
+  // Called when employee confirms going offline
+  const stopTracking = () => {
+    if (watchIdRef.current) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    setIsOnline(false);
+    setCurrentLocation(null);
+    setOnlineSince(null);
+
+    // ── SEND TO BACKEND (uncomment when backend ready) ──
+    // axiosInstance.post("/api/location/offline", {
+    //   employeeId: user._id,
+    //   timestamp: new Date().toISOString(),
+    // }).catch(console.error);
+    // ── END BACKEND CODE ──
+  };
+
+  // GPS denied — force offline without modal
+  const goOfflineForced = () => {
+    if (watchIdRef.current) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    setIsOnline(false);
+    setCurrentLocation(null);
+    setOnlineSince(null);
+  };
+
+  // ── TOGGLE HANDLER ───────────────────────────────────────
+  const handleToggle = () => {
+    if (isOnline) {
+      // Employee trying to go offline → show warning modal
+      setShowOfflineModal(true);
+    } else {
+      // Employee going online → start GPS
+      startTracking();
+    }
+  };
+
+  // Employee confirmed going offline from modal
+  const handleConfirmOffline = () => {
+    setShowOfflineModal(false);
+    stopTracking();
+  };
+
+  // Employee cancelled → stay online
+  const handleCancelOffline = () => {
+    setShowOfflineModal(false);
+  };
+
+  // Online duration display (e.g. "2h 14m")
+  const getOnlineDuration = () => {
+    if (!onlineSince) return "";
+    const ms = Date.now() - onlineSince.getTime();
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    if (h > 0) return `${h}h ${m}m online`;
+    return `${m}m online`;
+  };
+
+  // ── RENDER ───────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
 
-      {/* HEADER */}
+      {/* ── OFFLINE MODAL ── */}
+      {showOfflineModal && (
+        <OfflineModal
+          onConfirm={handleConfirmOffline}
+          onCancel={handleCancelOffline}
+        />
+      )}
+
+      {/* ── HEADER ── */}
       <div className="bg-blue-600 px-4 pt-10 pb-8">
         <div className="flex items-center justify-between mb-1">
           <div>
@@ -52,7 +264,7 @@ export default function DashboardPage() {
             <h1 className="text-white text-xl font-bold">{firstName} 👋</h1>
           </div>
 
-          {/* Avatar — shows real photo if registered */}
+          {/* Profile avatar */}
           <button
             onClick={() => navigate("/profile")}
             className="w-11 h-11 rounded-xl overflow-hidden border-2 border-blue-400 flex-shrink-0"
@@ -71,17 +283,126 @@ export default function DashboardPage() {
           {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
         </p>
 
-        {/* Employee ID badge */}
+        {/* Employee ID */}
         {user?.employeeId && (
           <div className="mt-2 inline-flex items-center gap-1.5 bg-blue-500/50 px-2.5 py-1 rounded-full">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+            <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-green-400 animate-pulse" : "bg-gray-400"}`} />
             <span className="text-xs text-blue-100 font-mono">{user.employeeId}</span>
           </div>
         )}
       </div>
 
-      {/* STATS CARDS */}
-      <div className="px-4 -mt-4 grid grid-cols-2 gap-3">
+      {/* ══════════════════════════════════════════════════════
+          ONLINE / OFFLINE TOGGLE CARD
+          This is the main new feature — Uber/Ola style switch
+          ══════════════════════════════════════════════════════ */}
+      <div className="px-4 -mt-5 mb-3">
+        <div className={`rounded-2xl p-4 shadow-lg transition-all duration-300 ${
+          isOnline
+            ? "bg-gradient-to-r from-green-500 to-emerald-600"
+            : "bg-white border border-gray-100"
+        }`}>
+          <div className="flex items-center justify-between">
+
+            {/* Left side — status text */}
+            <div>
+              {isOnline ? (
+                <>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                    <p className="text-white font-bold text-base">You're Online</p>
+                  </div>
+                  <p className="text-green-100 text-xs">
+                    Sharing live location with manager
+                  </p>
+                  {onlineSince && (
+                    <p className="text-green-200 text-[10px] mt-0.5 font-mono">
+                      {getOnlineDuration()}
+                    </p>
+                  )}
+                  {currentLocation && (
+                    <p className="text-green-200 text-[10px] mt-0.5">
+                      ±{currentLocation.accuracy}m accuracy
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <div className="w-2 h-2 bg-gray-300 rounded-full" />
+                    <p className="text-gray-700 font-bold text-base">You're Offline</p>
+                  </div>
+                  <p className="text-gray-400 text-xs">
+                    Tap to go online & share location
+                  </p>
+                  {locationError && (
+                    <p className="text-red-500 text-[10px] mt-0.5">{locationError}</p>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Right side — the toggle switch */}
+            <button
+              onClick={handleToggle}
+              className={`relative w-16 h-8 rounded-full transition-all duration-300 flex-shrink-0 ${
+                isOnline ? "bg-white/30" : "bg-gray-200"
+              }`}
+            >
+              {/* Toggle knob */}
+              <div className={`absolute top-1 w-6 h-6 rounded-full shadow-md transition-all duration-300 ${
+                isOnline
+                  ? "left-9 bg-white"
+                  : "left-1 bg-white"
+              }`} />
+            </button>
+
+          </div>
+
+          {/* GPS location pulse animation when online */}
+          {isOnline && currentLocation && (
+            <div className="mt-3 pt-3 border-t border-white/20 flex items-center gap-2">
+              <div className="relative">
+                <div className="w-2 h-2 bg-white rounded-full" />
+                <div className="absolute inset-0 w-2 h-2 bg-white rounded-full animate-ping opacity-75" />
+              </div>
+              <p className="text-white text-xs font-mono">
+                {currentLocation.lat.toFixed(5)}, {currentLocation.lng.toFixed(5)}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+      {/* ══════════════════════════════════════════════════════
+          END ONLINE/OFFLINE TOGGLE
+          ══════════════════════════════════════════════════════ */}
+
+      {/* ── TODAY'S FOLLOW-UP REMINDER ── */}
+      {todayFollowups.length > 0 && (
+        <div className="mx-4 mb-3 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-base">🔔</span>
+            <p className="text-sm font-semibold text-amber-800">
+              {todayFollowups.length} Follow-up{todayFollowups.length > 1 ? "s" : ""} Due Today
+            </p>
+            <button onClick={() => navigate("/my-visits")}
+              className="ml-auto text-xs text-amber-600 font-semibold underline">
+              View all
+            </button>
+          </div>
+          {todayFollowups.map((v) => (
+            <div key={v._id}
+              onClick={() => navigate(`/visit-detail/${v._id}`)}
+              className="bg-white rounded-xl px-3 py-2.5 border border-amber-100 mb-1.5 cursor-pointer active:scale-[0.98] transition last:mb-0">
+              <p className="text-xs font-semibold text-gray-900">{v.shopName}</p>
+              <p className="text-[10px] text-amber-600 font-medium mt-0.5">Follow up now →</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── STATS CARDS ── */}
+      <div className="px-4 grid grid-cols-2 gap-3">
         <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
           <p className="text-xs text-gray-400 mb-1">Today's Visits</p>
           {loading ? <div className="h-8 bg-gray-100 rounded animate-pulse" /> : (
@@ -100,7 +421,7 @@ export default function DashboardPage() {
 
       <div className="px-4 mt-3 space-y-4">
 
-        {/* WEEKLY TARGET */}
+        {/* Weekly Target */}
         <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
           <div className="flex justify-between items-center mb-3">
             <p className="text-sm font-semibold text-gray-700">Weekly Target</p>
@@ -116,7 +437,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* QUICK ACTIONS */}
+        {/* Quick Actions */}
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Quick Actions</p>
 
         <div className="grid grid-cols-2 gap-3">
@@ -170,7 +491,7 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* RECENT VISITS */}
+        {/* Recent Visits */}
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Recent Visits</p>
           <button onClick={() => navigate("/my-visits")} className="text-xs text-blue-600 font-medium">See all →</button>
@@ -187,7 +508,9 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {recentVisits.map((visit) => <ShopVisitCard key={visit._id} visit={visit} />)}
+            {recentVisits.map((visit) => (
+              <ShopVisitCard key={visit._id} visit={visit} />
+            ))}
           </div>
         )}
 
