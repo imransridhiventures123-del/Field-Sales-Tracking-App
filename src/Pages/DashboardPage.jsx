@@ -1,6 +1,6 @@
 // FILE: src/pages/DashboardPage.jsx
 // OWNER: Imran
-// ADDED: End of Day button in Quick Actions
+// MERGED: Imran's End of Day + Naveen's Performance & Follow-ups buttons
 
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -45,14 +45,14 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [stats, setStats]           = useState(null);
+  const [stats, setStats]               = useState(null);
   const [recentVisits, setRecentVisits] = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [isOnline, setIsOnline]     = useState(false);
+  const [loading, setLoading]           = useState(true);
+  const [isOnline, setIsOnline]         = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [locationError, setLocationError]     = useState("");
   const [showOfflineModal, setShowOfflineModal] = useState(false);
-  const [onlineSince, setOnlineSince] = useState(null);
+  const [onlineSince, setOnlineSince]   = useState(null);
   const watchIdRef = useRef(null);
 
   const firstName = user?.name?.split(" ")[0] || "Employee";
@@ -165,7 +165,10 @@ export default function DashboardPage() {
           </div>
           {isOnline && currentLocation && (
             <div className="mt-3 pt-3 border-t border-white/20 flex items-center gap-2">
-              <div className="relative"><div className="w-2 h-2 bg-white rounded-full" /><div className="absolute inset-0 w-2 h-2 bg-white rounded-full animate-ping opacity-75" /></div>
+              <div className="relative">
+                <div className="w-2 h-2 bg-white rounded-full" />
+                <div className="absolute inset-0 w-2 h-2 bg-white rounded-full animate-ping opacity-75" />
+              </div>
               <p className="text-white text-xs font-mono">{currentLocation.lat.toFixed(5)}, {currentLocation.lng.toFixed(5)}</p>
             </div>
           )}
@@ -221,11 +224,12 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Quick Actions */}
+        {/* Quick Actions — 6 buttons total (3 rows of 2) */}
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Quick Actions</p>
 
         <div className="grid grid-cols-2 gap-3">
 
+          {/* 1 — Start Visit (Imran) */}
           <button onClick={() => navigate("/visit-shop")}
             className="bg-blue-600 rounded-2xl p-4 text-left active:scale-95 transition">
             <div className="w-9 h-9 bg-blue-500 rounded-xl flex items-center justify-center mb-3">
@@ -238,6 +242,7 @@ export default function DashboardPage() {
             <p className="text-blue-200 text-xs mt-0.5">Log a shop visit</p>
           </button>
 
+          {/* 2 — My Visits (Imran) */}
           <button onClick={() => navigate("/my-visits")}
             className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
             <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center mb-3">
@@ -249,6 +254,7 @@ export default function DashboardPage() {
             <p className="text-gray-400 text-xs mt-0.5">View history</p>
           </button>
 
+          {/* 3 — Daily Target (Imran) */}
           <button onClick={() => navigate("/daily-target")}
             className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
             <div className="w-9 h-9 bg-green-50 rounded-xl flex items-center justify-center mb-3">
@@ -260,7 +266,7 @@ export default function DashboardPage() {
             <p className="text-gray-400 text-xs mt-0.5">Track progress</p>
           </button>
 
-          {/* ── END OF DAY BUTTON ── NEW ── */}
+          {/* 4 — End of Day (Imran) */}
           <button onClick={() => navigate("/end-of-day")}
             className="bg-white rounded-2xl border-2 border-orange-200 p-4 text-left active:scale-95 transition shadow-sm">
             <div className="w-9 h-9 bg-orange-50 rounded-xl flex items-center justify-center mb-3">
@@ -270,6 +276,30 @@ export default function DashboardPage() {
             </div>
             <p className="text-gray-800 font-semibold text-sm">End of Day</p>
             <p className="text-orange-400 text-xs mt-0.5">Send report</p>
+          </button>
+
+          {/* 5 — Performance (Naveen) */}
+          <button onClick={() => navigate("/performance")}
+            className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
+            <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center mb-3">
+              <svg className="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+              </svg>
+            </div>
+            <p className="text-gray-800 font-semibold text-sm">Performance</p>
+            <p className="text-gray-400 text-xs mt-0.5">Revenue ledger</p>
+          </button>
+
+          {/* 6 — Follow-ups (Naveen) */}
+          <button onClick={() => navigate("/followups")}
+            className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
+            <div className="w-9 h-9 bg-red-50 rounded-xl flex items-center justify-center mb-3">
+              <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+              </svg>
+            </div>
+            <p className="text-gray-800 font-semibold text-sm">Follow-ups</p>
+            <p className="text-gray-400 text-xs mt-0.5">6 pending</p>
           </button>
 
         </div>
