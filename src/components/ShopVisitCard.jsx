@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { formatTime } from "../utils/helpers";
 
 export default function ShopVisitCard({ visit, onClick }) {
   const navigate = useNavigate();

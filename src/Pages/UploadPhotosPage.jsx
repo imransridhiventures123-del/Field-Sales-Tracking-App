@@ -1,60 +1,26 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVisit } from "../context/VisitContext";
+import { useCamera } from "../hooks/useCamera";
 
 export default function UploadPhotosPage() {
   const navigate = useNavigate();
   const { visitForm, updateVisitForm, submitVisit, isSubmitting } = useVisit();
 
-  const [photos, setPhotos] = useState([]);
+  const { photos, error, addPhotos, removePhoto, getBase64Photos, isFull, count } = useCamera();
   const [notes, setNotes] = useState("");
-  const [error, setError] = useState(null);
   const [submitError, setSubmitError] = useState(null);
 
-  const handlePhotoSelect = (e) => {
-    const files = Array.from(e.target.files);
-    if (photos.length + files.length > 5) {
-      setError("Maximum 5 photos allowed.");
-      return;
-    }
-    setError(null);
-
-    const newPhotos = files.map((file) => ({
-      file,
-      preview: URL.createObjectURL(file),
-      name: file.name,
-    }));
-
-    setPhotos((prev) => [...prev, ...newPhotos]);
-  };
-
-  const handleRemovePhoto = (index) => {
-    setPhotos((prev) => prev.filter((_, i) => i !== index));
-  };
+  const handlePhotoSelect = (e) => addPhotos(e.target.files);
+  const handleRemovePhoto = (index) => removePhoto(index);
 
   const handleSubmit = async () => {
-    if (photos.length === 0) {
-      setError("Please add at least one photo.");
-      return;
-    }
-    setError(null);
+    if (count === 0) return;
     setSubmitError(null);
 
     updateVisitForm({ notes });
 
-    // Convert photos to base64 for API
-    const base64Photos = await Promise.all(
-      photos.map(
-        (p) =>
-          new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () =>
-              resolve({ name: p.name, base64: reader.result });
-            reader.readAsDataURL(p.file);
-          })
-      )
-    );
-
+    const base64Photos = await getBase64Photos();
     const result = await submitVisit({ photos: base64Photos, notes });
 
     if (result.success) {
@@ -147,7 +113,7 @@ export default function UploadPhotosPage() {
           ))}
 
           {/* ADD PHOTO BUTTON */}
-          {photos.length < 5 && (
+          {!isFull && (
             <label className="aspect-square rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer bg-white hover:bg-gray-50 transition">
               <svg className="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -167,7 +133,7 @@ export default function UploadPhotosPage() {
         </div>
 
         <p className="text-xs text-gray-400 text-center">
-          {photos.length}/5 photos added
+          {count}/5 photos added
         </p>
 
         {error && (
@@ -188,7 +154,6 @@ export default function UploadPhotosPage() {
           />
         </div>
 
-        {/* SUBMIT ERROR */}
         {submitError && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-3">
             <p className="text-xs text-red-600">{submitError}</p>
@@ -201,9 +166,9 @@ export default function UploadPhotosPage() {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-3">
         <button
           onClick={handleSubmit}
-          disabled={isSubmitting || photos.length === 0}
+          disabled={isSubmitting || count === 0}
           className={`w-full py-4 rounded-xl text-white font-semibold text-base transition
-            ${isSubmitting || photos.length === 0
+            ${isSubmitting || count === 0
               ? "bg-blue-400 cursor-not-allowed"
               : "bg-blue-600 hover:bg-blue-700 active:scale-95"
             }`}
