@@ -390,7 +390,7 @@ export default function LoginPage() {
             <span className="text-white text-xl font-bold">M</span>
           </div>
           <div>
-            <p className="text-[15px] font-semibold text-gray-900 leading-tight">Maavu Sales Pro</p>
+            <p className="text-[15px] font-semibold text-gray-900 leading-tight">Field-Sales-Pro</p>
             <p className="text-[11px] text-gray-400 mt-0.5">Field Sales & Distribution</p>
           </div>
         </div>
