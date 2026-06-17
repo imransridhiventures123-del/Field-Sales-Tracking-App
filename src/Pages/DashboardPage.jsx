@@ -113,7 +113,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-1">
           <div>
             <p className="text-blue-200 text-xs">{getGreeting()},</p>
-            <h1 className="text-white text-xl font-bold">{firstName} 👋</h1>
+            <h1 className="text-white text-xl font-bold">{firstName} </h1>
           </div>
           <button onClick={() => navigate("/profile")} className="w-11 h-11 rounded-xl overflow-hidden border-2 border-blue-400 flex-shrink-0">
             {user?.photo
