@@ -64,7 +64,7 @@ export default function VisitShopPage() {
   const validate = () => {
     const e = {};
     if (!form.shopName.trim())   e.shopName  = "Shop name is required";
-    if (!form.shopCode.trim())   e.shopCode  = "Shop code is required";
+    if (!form.shopCode.trim())   e.shopCode  = "Shop coontact number is required";
     if (!form.ownerName.trim())  e.ownerName = "Owner name is required";
     if (!form.mobile.trim())     e.mobile    = "Mobile number is required";
     else if (!/^[6-9]\d{9}$/.test(form.mobile)) e.mobile = "Enter valid 10-digit number";
@@ -134,13 +134,13 @@ export default function VisitShopPage() {
           {errors.shopName && <p className="text-xs text-red-500 mt-1">{errors.shopName}</p>}
         </div>
 
-        {/* Shop Code */}
+        {/* Shop Contact Number */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Shop Code <span className="text-red-500">*</span>
+            Shop Contact Number <span className="text-red-500">*</span>
           </label>
           <input name="shopCode" value={form.shopCode} onChange={handleChange}
-            placeholder="e.g. AP001"
+            placeholder="e.g. 9999999999"
             className={`w-full px-4 py-3.5 rounded-2xl border text-sm bg-white outline-none
               focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all
               ${errors.shopCode ? "border-red-400 bg-red-50" : "border-gray-200"}`}

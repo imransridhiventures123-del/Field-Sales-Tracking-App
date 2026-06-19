@@ -4,12 +4,8 @@
 // CREATE FOLDER: src/data/
 
 export const TELECALLERS = [
-  { _id: "tc001", name: "Priya R",     phone: "8925864472", status: "available",   avatar: "PR" },
-  { _id: "tc002", name: "Divya S",     phone: "9876541002", status: "available",   avatar: "DS" },
-  { _id: "tc003", name: "Meena K",     phone: "9876541003", status: "busy",        avatar: "MK" },
-  { _id: "tc004", name: "Lakshmi P",   phone: "9876541004", status: "available",   avatar: "LP" },
-  { _id: "tc005", name: "Kavitha M",   phone: "9876541005", status: "unavailable", avatar: "KM" },
-  { _id: "tc006", name: "Anitha B",    phone: "9876541006", status: "available",   avatar: "AB" },
+  { _id: "tc001", name: "Priya R",     phone: "8925864472", status: "available",   avatar: "PR" }
+  
 ];
 
 // Status colors used in TelecallerModal

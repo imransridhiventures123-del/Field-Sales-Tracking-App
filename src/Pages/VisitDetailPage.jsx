@@ -1,21 +1,42 @@
 // FILE: src/pages/VisitDetailPage.jsx
 // OWNER: Naveen
+// CHANGE: Removed DUMMY_VISITS, now fetches the real visit from the backend
 
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-
-const DUMMY_VISITS = {
-  "1": { _id: "1", shopName: "Annas Provision Store", shopCode: "AP001", ownerName: "Annas", mobile: "9876543210", shopType: "Grocery", address: "123 Main St, Chennai", categories: ["Grocery", "Provisions"], status: "Completed", latitude: 13.0827, longitude: 80.2707, photos: [], createdAt: new Date().toISOString() },
-  "2": { _id: "2", shopName: "Big Bazaar", shopCode: "BB001", ownerName: "Ravi", mobile: "9876543211", shopType: "Supermarket", address: "456 Anna Salai, Chennai", categories: ["Beverages"], status: "Pending", latitude: 13.0569, longitude: 80.2425, photos: [], createdAt: new Date(Date.now() - 3600000).toISOString() },
-};
+import { getVisitById } from "../api/visitApi";
 
 export default function VisitDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const visit = DUMMY_VISITS[id];
+  const [visit, setVisit] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  if (!visit) return (
-    <div className="min-h-screen flex items-center justify-center text-gray-400">
-      Visit not found.
+  useEffect(() => {
+    const fetchVisit = async () => {
+      try {
+        const data = await getVisitById(id);
+        setVisit(data.visit);
+      } catch (err) {
+        setError(err.response?.data?.message || "Could not load this visit.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchVisit();
+  }, [id]);
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
+      Loading visit...
+    </div>
+  );
+
+  if (error || !visit) return (
+    <div className="min-h-screen flex flex-col items-center justify-center text-gray-400 gap-2 px-4 text-center">
+      <p>{error || "Visit not found."}</p>
+      <button onClick={() => navigate(-1)} className="text-blue-600 text-sm font-medium">Go back</button>
     </div>
   );
 
@@ -52,33 +73,60 @@ export default function VisitDetailPage() {
             ["Shop Code", visit.shopCode],
             ["Owner Name", visit.ownerName],
             ["Mobile", visit.mobile],
-            ["Shop Type", visit.shopType],
+            ["Field Type", visit.fieldType],
             ["Address", visit.address],
           ].map(([label, value]) => (
             <div key={label} className="flex justify-between text-sm">
               <span className="text-gray-400">{label}</span>
-              <span className="text-gray-900 font-medium text-right max-w-[55%]">{value}</span>
+              <span className="text-gray-900 font-medium text-right max-w-[55%]">{value || "—"}</span>
             </div>
           ))}
         </div>
 
-        {/* Categories */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Categories</p>
-          <div className="flex flex-wrap gap-2">
-            {visit.categories.map((c) => (
-              <span key={c} className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full">{c}</span>
-            ))}
+        {/* Photos */}
+        {visit.photos && visit.photos.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Photos</p>
+            <div className="grid grid-cols-3 gap-2">
+              {visit.photos.map((photo, i) => (
+                <a key={i} href={photo.url} target="_blank" rel="noreferrer" className="block">
+                  <img src={photo.url} alt={photo.type || "Visit photo"} className="w-full h-24 object-cover rounded-lg border border-gray-100" />
+                  <p className="text-[10px] text-gray-400 mt-1 text-center">{photo.type}</p>
+                </a>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Location */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Location</p>
-          <p className="text-sm text-gray-700 font-mono">
-            {visit.latitude?.toFixed(6)}, {visit.longitude?.toFixed(6)}
-          </p>
-        </div>
+        {(visit.latitude && visit.longitude) && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Location</p>
+            <p className="text-sm text-gray-700 font-mono">
+              {visit.latitude.toFixed(6)}, {visit.longitude.toFixed(6)}
+            </p>
+            {visit.locationAccuracy != null && (
+              <p className="text-xs text-gray-400 mt-1">±{visit.locationAccuracy}m accuracy</p>
+            )}
+          </div>
+        )}
+
+        {/* Follow-up */}
+        {visit.followUp?.needed && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Follow-up</p>
+            <p className="text-sm text-amber-800">{visit.followUp.status?.replace("_", " ") || "Follow-up needed"}</p>
+            {visit.followUp.date && <p className="text-xs text-amber-600 mt-1">Due: {visit.followUp.date}</p>}
+          </div>
+        )}
+
+        {/* Notes */}
+        {visit.notes && (
+          <div className="bg-white rounded-2xl border border-gray-100 p-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Notes</p>
+            <p className="text-sm text-gray-700">{visit.notes}</p>
+          </div>
+        )}
 
         {/* Visit time */}
         <div className="bg-white rounded-2xl border border-gray-100 p-4">

@@ -3,14 +3,31 @@
 // PURPOSE: Bottom sheet modal to pick a telecaller and send PDF
 // USED IN: EndOfDayPage.jsx
 
-import { useState } from "react";
-import { TELECALLERS, STATUS_STYLE } from "../data/telecallerData";
+import { useState, useEffect } from "react";
+import { STATUS_STYLE } from "../data/telecallerData";
+import { getTelecallers } from "../api/visitApi";
 
 export default function TelecallerModal({ onClose, onSend, generating }) {
+  const [telecallers, setTelecallers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [search, setSearch]     = useState("");
 
-  const filtered = TELECALLERS.filter((tc) =>
+  useEffect(() => {
+    const fetchTelecallers = async () => {
+      try {
+        const list = await getTelecallers();
+        setTelecallers(list);
+      } catch (err) {
+        console.error("Telecallers fetch error:", err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTelecallers();
+  }, []);
+
+  const filtered = telecallers.filter((tc) =>
     tc.name.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -60,7 +77,9 @@ export default function TelecallerModal({ onClose, onSend, generating }) {
 
         {/* Telecaller list */}
         <div className="px-5 space-y-2 max-h-64 overflow-y-auto pb-2">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <p className="text-center text-sm text-gray-400 py-6">Loading telecallers...</p>
+          ) : filtered.length === 0 ? (
             <p className="text-center text-sm text-gray-400 py-6">No telecaller found</p>
           ) : (
             filtered.map((tc) => {

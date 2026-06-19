@@ -77,15 +77,15 @@ export function useCamera() {
     setError(null);
   }, []);
 
-  // Convert all photos to base64 for API submission
+   // Convert all photos to base64 for API submission
+  // Returns a plain array of base64 strings (backend expects raw strings)
   const getBase64Photos = useCallback(() => {
     return Promise.all(
       photos.map(
         (p) =>
           new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = () =>
-              resolve({ name: p.name, base64: reader.result });
+            reader.onload = () => resolve(reader.result);
             reader.onerror = () => reject(new Error("Failed to read file"));
             reader.readAsDataURL(p.file);
           })

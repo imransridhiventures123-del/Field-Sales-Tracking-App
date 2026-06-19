@@ -1,14 +1,52 @@
 // FILE: src/pages/DailyTargetPage.jsx
 // OWNER: Imran
+// CHANGE: Removed DUMMY_TARGET — now derived from real backend data
+// (today's visits + the employee's dailyTarget from /api/visits/stats)
 
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-
-const DUMMY_TARGET = { target: 20, completed: 12, pending: 5, rejected: 3 };
+import { getMyStats } from "../api/visitApi";
+import { getTodayVisits } from "../api/visitApi";
 
 export default function DailyTargetPage() {
   const navigate = useNavigate();
-  const { target, completed, pending, rejected } = DUMMY_TARGET;
-  const pct = Math.round((completed / target) * 100);
+  const [target, setTarget] = useState(0);
+  const [completed, setCompleted] = useState(0);
+  const [pending, setPending] = useState(0);
+  const [rejected, setRejected] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [stats, todayData] = await Promise.all([
+          getMyStats(),
+          getTodayVisits(),
+        ]);
+        const todayVisits = todayData.visits || [];
+        setTarget(stats.dailyTarget || 20);
+        setCompleted(todayVisits.filter((v) => v.status === "Completed").length);
+        setPending(todayVisits.filter((v) => v.status === "Pending").length);
+        setRejected(todayVisits.filter((v) => v.status === "Rejected").length);
+      } catch (err) {
+        console.error("Daily target fetch error:", err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const pct = target > 0 ? Math.round((completed / target) * 100) : 0;
+  const remaining = Math.max(target - completed, 0);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400 text-sm">
+        Loading today's progress...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -60,7 +98,7 @@ export default function DailyTargetPage() {
         {/* Remaining */}
         <div className="bg-blue-600 rounded-2xl p-4 text-white text-center">
           <p className="text-xs text-blue-200 mb-1">Remaining Today</p>
-          <p className="text-4xl font-bold">{target - completed}</p>
+          <p className="text-4xl font-bold">{remaining}</p>
           <p className="text-xs text-blue-200 mt-1">shops left to visit</p>
         </div>
 

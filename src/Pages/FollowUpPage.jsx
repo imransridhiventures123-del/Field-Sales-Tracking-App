@@ -2,10 +2,14 @@
 // FILE: src/pages/FollowUpPage.jsx
 // OWNER: Naveen / Imran
 // PURPOSE: Dedicated follow-up management page
+// CHANGE: Removed DUMMY_FOLLOWUPS — now loads real visits with
+// an open follow-up from the backend, and reschedule/mark-done
+// actions persist via PUT /api/visits/:id/followup
 // ============================================================
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { getMyFollowUps, rescheduleFollowUp, markFollowUpDone } from "../api/visitApi";
 
 const TODAY = new Date().toISOString().split("T")[0];
 
@@ -20,106 +24,55 @@ function daysDiff(dateStr) {
   return diff;
 }
 
-const DUMMY_FOLLOWUPS = [
-  {
-    _id: "f1",
-    shopName: "Annas Provision Store",
-    shopCode: "AP001",
-    ownerName: "Annas Rahman",
-    ownerMobile: "9876501234",
-    fieldType: "Field Sales",
-    followUpStatus: "Interested",
-    followUpDate: addDays(TODAY, -2),
-    lastNote: "Owner showed strong interest in batter. Asked for a demo.",
-    visitDate: addDays(TODAY, -5),
-    outcome: null,
-  },
-  {
-    _id: "f2",
-    shopName: "Big Bazaar",
-    shopCode: "BB001",
-    ownerName: "Ravi Kumar",
-    ownerMobile: "9876502345",
-    fieldType: "Collection",
-    followUpStatus: "Payment Due",
-    followUpDate: addDays(TODAY, -1),
-    lastNote: "₹4,200 pending. Owner said will pay by end of week.",
-    visitDate: addDays(TODAY, -3),
-    outcome: null,
-  },
-  {
-    _id: "f3",
-    shopName: "Sri Murugan Stores",
-    shopCode: "SM001",
-    ownerName: "Murugan",
-    ownerMobile: "9876503456",
-    fieldType: "Field Sales",
-    followUpStatus: "Call Back",
-    followUpDate: TODAY,
-    lastNote: "Owner was busy. Asked to call back today morning.",
-    visitDate: addDays(TODAY, -1),
-    outcome: null,
-  },
-  {
-    _id: "f4",
-    shopName: "Kumar Provisions",
-    shopCode: "KP001",
-    ownerName: "Suresh Kumar",
-    ownerMobile: "9876504567",
-    fieldType: "Field Sales",
-    followUpStatus: "Interested",
-    followUpDate: TODAY,
-    lastNote: "Wants to order 50kg batter weekly. Needs pricing confirmation.",
-    visitDate: addDays(TODAY, -2),
-    outcome: null,
-  },
-  {
-    _id: "f5",
-    shopName: "Sree Ram Hotel",
-    shopCode: "SR001",
-    ownerName: "Ramesh",
-    ownerMobile: "9876505678",
-    fieldType: "Field Sales",
-    followUpStatus: "Busy / Come Later",
-    followUpDate: addDays(TODAY, 2),
-    lastNote: "Very busy during lunch hours. Come after 3pm.",
-    visitDate: TODAY,
-    outcome: null,
-  },
-  {
-    _id: "f6",
-    shopName: "New Modern Store",
-    shopCode: "NM001",
-    ownerName: "Venkatesh",
-    ownerMobile: "9876506789",
-    fieldType: "Collection",
-    followUpStatus: "Payment Due",
-    followUpDate: addDays(TODAY, 3),
-    lastNote: "₹2,800 pending. Will arrange by Thursday.",
-    visitDate: addDays(TODAY, -1),
-    outcome: null,
-  },
-];
+// Backend stores followUp.status as one of these enum keys —
+// map them to the friendly labels the UI already uses.
+const STATUS_LABELS = {
+  interested:      "Interested",
+  callback:        "Call Back",
+  not_interested:  "Not Interested",
+  busy:            "Busy / Come Later",
+  order_placed:    "Order Placed",
+  payment_due:     "Payment Due",
+};
 
 const STATUS_COLORS = {
-  "Interested":       { bg: "bg-green-100",  text: "text-green-700" },
-  "Call Back":        { bg: "bg-blue-100",   text: "text-blue-700" },
-  "Payment Due":      { bg: "bg-red-100",    text: "text-red-700" },
-  "Busy / Come Later":{ bg: "bg-amber-100",  text: "text-amber-700" },
-  "Order Placed":     { bg: "bg-violet-100", text: "text-violet-700" },
+  "Interested":        { bg: "bg-green-100",  text: "text-green-700" },
+  "Call Back":         { bg: "bg-blue-100",   text: "text-blue-700" },
+  "Payment Due":       { bg: "bg-red-100",    text: "text-red-700" },
+  "Busy / Come Later": { bg: "bg-amber-100",  text: "text-amber-700" },
+  "Order Placed":      { bg: "bg-violet-100", text: "text-violet-700" },
+  "Not Interested":    { bg: "bg-gray-100",   text: "text-gray-600" },
 };
 
 const OUTCOME_OPTIONS = [
-  { key: "order_placed",    label: "Order Placed" },
-  { key: "payment_received",label: "Payment Received" },
-  { key: "call_back_again", label: "Call Back Again" },
-  { key: "not_interested",  label: "Not Interested" },
-  { key: "meeting_done",    label: "Meeting Done" },
+  { key: "order_placed",     label: "Order Placed" },
+  { key: "payment_received", label: "Payment Received" },
+  { key: "call_back_again",  label: "Call Back Again" },
+  { key: "not_interested",   label: "Not Interested" },
+  { key: "meeting_done",     label: "Meeting Done" },
 ];
+
+// Map a raw backend visit into the shape this page's UI expects
+function mapVisit(v) {
+  return {
+    _id: v._id,
+    shopName: v.shopName,
+    shopCode: v.shopCode,
+    ownerName: v.ownerName,
+    ownerMobile: v.mobile,
+    fieldType: v.fieldType,
+    followUpStatus: STATUS_LABELS[v.followUp?.status] || "Follow-up",
+    followUpDate: v.followUp?.date || TODAY,
+    lastNote: v.notes || "",
+    visitDate: v.createdAt,
+    outcome: null,
+  };
+}
 
 export default function FollowUpPage() {
   const navigate = useNavigate();
-  const [followups, setFollowups] = useState(DUMMY_FOLLOWUPS);
+  const [followups, setFollowups] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all"); // all | overdue | today | upcoming
   const [expandedId, setExpandedId] = useState(null);
@@ -127,6 +80,21 @@ export default function FollowUpPage() {
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [doneModal, setDoneModal] = useState(null); // { id, selectedOutcome, note }
   const [toast, setToast] = useState("");
+
+  // ── LOAD REAL FOLLOW-UPS FROM BACKEND ──────────────────────
+  useEffect(() => {
+    const fetchFollowUps = async () => {
+      try {
+        const visits = await getMyFollowUps();
+        setFollowups(visits.map(mapVisit));
+      } catch (err) {
+        console.error("Follow-ups fetch error:", err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchFollowUps();
+  }, []);
 
   // ── COMPUTED ──────────────────────────────────────────────
   const active = followups.filter((f) => !f.outcome);
@@ -145,18 +113,29 @@ export default function FollowUpPage() {
   }, [followups, filter, search]);
 
   // ── ACTIONS ───────────────────────────────────────────────
-  function handleReschedule(id) {
+  async function handleReschedule(id) {
     if (!rescheduleDate) return;
-    setFollowups((prev) => prev.map((f) => f._id === id ? { ...f, followUpDate: rescheduleDate } : f));
-    setRescheduleId(null);
-    setRescheduleDate("");
-    showToast("Follow-up rescheduled.");
+    try {
+      await rescheduleFollowUp(id, rescheduleDate);
+      setFollowups((prev) => prev.map((f) => f._id === id ? { ...f, followUpDate: rescheduleDate } : f));
+      setRescheduleId(null);
+      setRescheduleDate("");
+      showToast("Follow-up rescheduled.");
+    } catch (err) {
+      showToast(err.response?.data?.message || "Could not reschedule.");
+    }
   }
 
-  function handleMarkDone(id, outcome, note) {
-    setFollowups((prev) => prev.map((f) => f._id === id ? { ...f, outcome, outcomeNote: note, outcomDate: TODAY } : f));
-    setDoneModal(null);
-    showToast("Marked as done.");
+  async function handleMarkDone(id, outcomeKey, note) {
+    const outcomeLabel = OUTCOME_OPTIONS.find((o) => o.key === outcomeKey)?.label || "Done";
+    try {
+      await markFollowUpDone(id, outcomeLabel, note);
+      setFollowups((prev) => prev.map((f) => f._id === id ? { ...f, outcome: outcomeKey || "done", outcomeNote: note, outcomeDate: TODAY } : f));
+      setDoneModal(null);
+      showToast("Marked as done.");
+    } catch (err) {
+      showToast(err.response?.data?.message || "Could not update follow-up.");
+    }
   }
 
   function showToast(msg) {
@@ -325,7 +304,7 @@ export default function FollowUpPage() {
           <div className="flex-1">
             <p className="text-xs text-gray-400 leading-none">Follow-ups</p>
             <p className="text-sm font-semibold text-gray-800 leading-tight">
-              {active.length} pending · {overdue.length} overdue
+              {loading ? "Loading..." : `${active.length} pending · ${overdue.length} overdue`}
             </p>
           </div>
         </div>
@@ -379,7 +358,16 @@ export default function FollowUpPage() {
 
       {/* CONTENT */}
       <div className="px-4 pt-4 space-y-4">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 animate-pulse">
+                <div className="h-4 bg-gray-100 rounded w-1/2 mb-2" />
+                <div className="h-3 bg-gray-100 rounded w-1/3" />
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
               <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">

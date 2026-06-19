@@ -5,29 +5,24 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const DEFAULT_PRODUCTS = [
   { id: "batter", name: "Batter", unit: "kg", margin: 3 },
   { id: "water", name: "Water", unit: "litre", margin: 1.5 },
 ];
 
-const DUMMY_EMPLOYEE = {
-  name: "Rakesh Kumar",
-  employeeId: "EMPRK9803",
-  salary: 25000,
-  role: "Field Sales",
-};
-
-const DUMMY_ENTRIES = [
-  { type: "collection", amount: 4200, note: "Sri Murugan Stores" },
-  { type: "collection", amount: 3800, note: "Kumar Provisions" },
-  { type: "sale", productId: "batter", qty: 120, note: "Big Bazaar" },
-  { type: "sale", productId: "batter", qty: 85, note: "Annas Store" },
-  { type: "sale", productId: "water", qty: 200, note: "Sree Ram Hotel" },
-];
-
 export default function PerformanceLedger() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // Real logged-in employee — falls back to safe defaults only if a field is missing
+  const employee = {
+    name: user?.name || "Employee",
+    employeeId: user?.employeeId || "—",
+    salary: user?.salary || 0,
+    role: user?.role === "admin" ? "Admin" : "Field Sales",
+  };
 
   const [products, setProducts] = useState(() => {
     try {
@@ -38,8 +33,17 @@ export default function PerformanceLedger() {
     }
   });
 
-  const [entries, setEntries] = useState(DUMMY_ENTRIES);
-  const [employee] = useState(DUMMY_EMPLOYEE);
+  // No backend model exists yet for ledger entries, so they're kept
+  // per-device in local storage (same pattern as products) instead
+  // of being fake/hardcoded. Starts empty for a real employee.
+  const [entries, setEntries] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`pl_entries_${user?.employeeId || "default"}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [tab, setTab] = useState("overview");
   const [addType, setAddType] = useState("collection");
   const [form, setForm] = useState({ amount: "", productId: DEFAULT_PRODUCTS[0]?.id || "", qty: "", note: "" });
@@ -63,7 +67,7 @@ export default function PerformanceLedger() {
   const dailySalaryCost = employee.salary / 30;
   const netResult = totalRevenue - dailySalaryCost;
   const isProfit = netResult >= 0;
-  const pct = (totalRevenue / employee.salary) * 100;
+  const pct = employee.salary > 0 ? (totalRevenue / employee.salary) * 100 : 0;
 
   const salesBreakdown = products.map((product) => {
     const productEntries = entries.filter((e) => e.type === "sale" && e.productId === product.id);
@@ -75,6 +79,10 @@ export default function PerformanceLedger() {
   useEffect(() => {
     localStorage.setItem("pl_products", JSON.stringify(products));
   }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem(`pl_entries_${user?.employeeId || "default"}`, JSON.stringify(entries));
+  }, [entries, user?.employeeId]);
 
   function handleAddEntry() {
     setFormError("");
