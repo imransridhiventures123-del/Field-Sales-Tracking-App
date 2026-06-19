@@ -12,12 +12,12 @@ import { useVisit } from "../context/VisitContext";
 const FIELD_TYPES = ["Field Sales", "Collection"];
 
 const FOLLOWUP_OPTIONS = [
-  { value: "interested",     label: "Interested",        emoji: "✅", color: "green"  },
-  { value: "callback",       label: "Call Back",         emoji: "📞", color: "blue"   },
-  { value: "not_interested", label: "Not Interested",    emoji: "❌", color: "red"    },
-  { value: "busy",           label: "Busy / Come Later", emoji: "⏰", color: "amber"  },
-  { value: "order_placed",   label: "Order Placed",      emoji: "🛒", color: "purple" },
-  { value: "payment_due",    label: "Payment Due",       emoji: "💰", color: "orange" },
+  { value: "interested",     label: "Interested",        color: "green"  },
+  { value: "callback",       label: "Call Back",          color: "blue"   },
+  { value: "not_interested", label: "Not Interested",    color: "red"    },
+  { value: "busy",           label: "Busy / Come Later", color: "amber"  },
+  { value: "order_placed",   label: "Order Placed",      color: "purple" },
+  { value: "payment_due",    label: "Payment Due",       color: "orange" },
 ];
 
 // Returns true if the selected followup status needs a reminder date
@@ -199,7 +199,7 @@ export default function VisitShopPage() {
                     : "bg-white text-gray-600 border-gray-200"
                   }`}
               >
-                {type === "Field Sales" ? "📍 Field Sales" : "💰 Collection"}
+                {type === "Field Sales" ? " Field Sales" : " Collection"}
               </button>
             ))}
           </div>
@@ -260,7 +260,7 @@ export default function VisitShopPage() {
           {form.followUpStatus && needsDate(form.followUpStatus) && (
             <div className="mt-4 bg-blue-50 border border-blue-100 rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-base">📅</span>
+                {/* <span className="text-base">📅</span> */}
                 <p className="text-sm font-semibold text-blue-800">Set Follow-up Reminder</p>
                 <span className="ml-auto text-[10px] text-blue-400 font-medium">Optional</span>
               </div>
