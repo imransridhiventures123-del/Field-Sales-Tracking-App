@@ -1,42 +1,39 @@
-// ============================================================
-//  FILE: src/api/visitApi.js
-//  OWNER: Naveen
-//  PURPOSE: All API calls related to visits
-//           Called by VisitContext's submitVisit()
-//           and MyVisitsPage to fetch visit history
-// ============================================================
+// FILE: src/api/visitApi.js (was visitApi.js in your project)
+// FULL REPLACEMENT — real API calls
 
-import axios from "./axiosInstance";
+import axiosInstance from "./axiosInstance";
 
-// ── SUBMIT A NEW VISIT ──────────────────────────────────────
-// Called from VisitContext.submitVisit()
-// Payload: { shopName, shopCode, ownerName, mobile, shopType,
-//            address, categories, latitude, longitude,
-//            locationAccuracy, photos, notes }
-export const submitVisit = async (payload) => {
-  const response = await axios.post("/visits", payload);
-  return response.data; // { visit: { _id, ... } }
+// Submit a completed visit (UploadPhotosPage.jsx)
+// Sends shop info + GPS + photos as JSON
+export const submitVisit = async (visitData) => {
+  try {
+    const res = await axiosInstance.post("/api/visits", visitData);
+    return { success: true, visit: res.data.visit };
+  } catch (err) {
+    return { success: false, error: err.response?.data?.message || "Submission failed" };
+  }
 };
 
-// ── GET ALL VISITS FOR LOGGED-IN EMPLOYEE ──────────────────
-// Called from MyVisitsPage to show visit history
-// Optional params: { page, limit, date, shopName }
+// Get logged-in employee's visits (MyVisitsPage.jsx)
 export const getMyVisits = async (params = {}) => {
-  const response = await axios.get("/visits/my", { params });
-  return response.data; // { visits: [...], total, page }
+  const res = await axiosInstance.get("/api/visits/my", { params });
+  return res.data; // { visits, total, page }
 };
 
-// ── GET SINGLE VISIT DETAIL ────────────────────────────────
-// Called from VisitDetailPage
-// visitId: MongoDB _id string
-export const getVisitById = async (visitId) => {
-  const response = await axios.get(`/visits/${visitId}`);
-  return response.data; // { visit: { ... } }
+// Get single visit detail (VisitDetailPage.jsx)
+export const getVisitById = async (id) => {
+  const res = await axiosInstance.get(`/api/visits/${id}`);
+  return res.data; // { visit }
 };
 
-// ── DELETE A VISIT ─────────────────────────────────────────
-// Called from MyVisitsPage if user wants to delete
-export const deleteVisit = async (visitId) => {
-  const response = await axios.delete(`/visits/${visitId}`);
-  return response.data;
+// Get today's visits (EndOfDayPage.jsx, DashboardPage.jsx)
+export const getTodayVisits = async () => {
+  const res = await axiosInstance.get("/api/visits/today");
+  return res.data; // { visits, total }
+};
+
+// Get my stats (DashboardPage.jsx KPI cards)
+export const getMyStats = async () => {
+  const res = await axiosInstance.get("/api/visits/stats");
+  return res.data;
 };
