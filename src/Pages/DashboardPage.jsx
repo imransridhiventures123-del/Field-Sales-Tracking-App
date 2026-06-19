@@ -1,19 +1,12 @@
 // FILE: src/pages/DashboardPage.jsx
-// OWNER: Imran
-// MERGED: Imran's End of Day + Naveen's Performance & Follow-ups buttons
+// CHANGE: Replaced FAKE_STATS and FAKE_RECENT with real API calls
 
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ShopVisitCard from "../components/ShopVisitCard";
-
-const FAKE_STATS = { todayVisits: 4, weeklyTarget: 30, weeklyDone: 18, totalVisits: 87 };
-
-const FAKE_RECENT = [
-  { _id: "1", shopName: "Annas Provision Store", shopCode: "AP001", ownerName: "Annas", fieldType: "Field Sales", status: "Completed", followUp: null, photos: [1, 2], createdAt: new Date().toISOString() },
-  { _id: "2", shopName: "Big Bazaar", shopCode: "BB001", ownerName: "Ravi", fieldType: "Collection", status: "Pending", followUp: { needed: true, date: new Date().toISOString().split("T")[0] }, photos: [1], createdAt: new Date(Date.now() - 3600000).toISOString() },
-  { _id: "3", shopName: "Sri Murugan Stores", shopCode: "SM001", ownerName: "Murugan", fieldType: "Field Sales", status: "Rejected", followUp: null, photos: [], createdAt: new Date(Date.now() - 7200000).toISOString() },
-];
+import axiosInstance from "../api/axiosInstance";
+import { updateLocation, goOffline } from "../api/locationApi";
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -35,7 +28,7 @@ function OfflineModal({ onConfirm, onCancel }) {
         <p className="text-sm text-gray-500 text-center mb-1">Your manager monitors your live location during work hours.</p>
         <p className="text-sm text-amber-600 font-medium text-center mb-6">Going offline will stop sharing your location.</p>
         <button onClick={onConfirm} className="w-full py-3.5 bg-red-500 text-white font-semibold rounded-2xl mb-3 active:scale-95 transition">Go Offline Anyway</button>
-        <button onClick={onCancel}  className="w-full py-3.5 bg-blue-600 text-white font-semibold rounded-2xl active:scale-95 transition">Stay Online ✓</button>
+        <button onClick={onCancel} className="w-full py-3.5 bg-blue-600 text-white font-semibold rounded-2xl active:scale-95 transition">Stay Online ✓</button>
       </div>
     </div>
   );
@@ -59,12 +52,27 @@ export default function DashboardPage() {
   const initials  = user?.name?.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) || "??";
   const weeklyPct = stats ? Math.round((stats.weeklyDone / stats.weeklyTarget) * 100) : 0;
 
-  const todayFollowups = FAKE_RECENT.filter(
+  const todayFollowups = recentVisits.filter(
     (v) => v.followUp?.needed && v.followUp?.date === new Date().toISOString().split("T")[0]
   );
 
+  // ── FETCH REAL DATA FROM BACKEND ──
   useEffect(() => {
-    setTimeout(() => { setStats(FAKE_STATS); setRecentVisits(FAKE_RECENT); setLoading(false); }, 600);
+    const fetchData = async () => {
+      try {
+        const [statsRes, visitsRes] = await Promise.all([
+          axiosInstance.get("/api/visits/stats"),
+          axiosInstance.get("/api/visits/my?limit=3"),
+        ]);
+        setStats(statsRes.data);
+        setRecentVisits(visitsRes.data.visits || []);
+      } catch (err) {
+        console.error("Dashboard fetch error:", err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
   useEffect(() => {
@@ -75,8 +83,12 @@ export default function DashboardPage() {
     if (!navigator.geolocation) { setLocationError("GPS not supported."); return; }
     setLocationError("");
     const id = navigator.geolocation.watchPosition(
-      (pos) => { setCurrentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: Math.round(pos.coords.accuracy) }); },
-      () => { setLocationError("Location access denied."); setIsOnline(false); setCurrentLocation(null); setOnlineSince(null); },
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        setCurrentLocation({ lat: latitude, lng: longitude, accuracy: Math.round(accuracy) });
+        updateLocation(latitude, longitude, Math.round(accuracy)); // sends to backend
+      },
+      () => { setLocationError("Location access denied."); setIsOnline(false); },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
     watchIdRef.current = id;
@@ -87,6 +99,7 @@ export default function DashboardPage() {
   const stopTracking = () => {
     if (watchIdRef.current) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
     setIsOnline(false); setCurrentLocation(null); setOnlineSince(null);
+    goOffline(); // tells backend employee is offline
   };
 
   const handleToggle = () => { isOnline ? setShowOfflineModal(true) : startTracking(); };
@@ -100,7 +113,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
-
       {showOfflineModal && (
         <OfflineModal
           onConfirm={() => { setShowOfflineModal(false); stopTracking(); }}
@@ -113,7 +125,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-1">
           <div>
             <p className="text-blue-200 text-xs">{getGreeting()},</p>
-            <h1 className="text-white text-xl font-bold">{firstName} </h1>
+            <h1 className="text-white text-xl font-bold">{firstName} 👋</h1>
           </div>
           <button onClick={() => navigate("/profile")} className="w-11 h-11 rounded-xl overflow-hidden border-2 border-blue-400 flex-shrink-0">
             {user?.photo
@@ -165,10 +177,7 @@ export default function DashboardPage() {
           </div>
           {isOnline && currentLocation && (
             <div className="mt-3 pt-3 border-t border-white/20 flex items-center gap-2">
-              <div className="relative">
-                <div className="w-2 h-2 bg-white rounded-full" />
-                <div className="absolute inset-0 w-2 h-2 bg-white rounded-full animate-ping opacity-75" />
-              </div>
+              <div className="relative"><div className="w-2 h-2 bg-white rounded-full" /><div className="absolute inset-0 w-2 h-2 bg-white rounded-full animate-ping opacity-75" /></div>
               <p className="text-white text-xs font-mono">{currentLocation.lat.toFixed(5)}, {currentLocation.lng.toFixed(5)}</p>
             </div>
           )}
@@ -197,111 +206,66 @@ export default function DashboardPage() {
       <div className="px-4 grid grid-cols-2 gap-3">
         <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
           <p className="text-xs text-gray-400 mb-1">Today's Visits</p>
-          {loading ? <div className="h-8 bg-gray-100 rounded animate-pulse" /> : <p className="text-3xl font-bold text-blue-600">{stats.todayVisits}</p>}
+          {loading ? <div className="h-8 bg-gray-100 rounded animate-pulse" /> : <p className="text-3xl font-bold text-blue-600">{stats?.todayVisits || 0}</p>}
           <p className="text-xs text-gray-400 mt-1">shops visited</p>
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
           <p className="text-xs text-gray-400 mb-1">Total Visits</p>
-          {loading ? <div className="h-8 bg-gray-100 rounded animate-pulse" /> : <p className="text-3xl font-bold text-gray-800">{stats.totalVisits}</p>}
+          {loading ? <div className="h-8 bg-gray-100 rounded animate-pulse" /> : <p className="text-3xl font-bold text-gray-800">{stats?.totalVisits || 0}</p>}
           <p className="text-xs text-gray-400 mt-1">all time</p>
         </div>
       </div>
 
       <div className="px-4 mt-3 space-y-4">
-
         {/* Weekly target */}
         <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
           <div className="flex justify-between items-center mb-3">
             <p className="text-sm font-semibold text-gray-700">Weekly Target</p>
-            {!loading && <span className="text-xs font-medium text-blue-600">{stats.weeklyDone}/{stats.weeklyTarget} visits</span>}
+            {!loading && <span className="text-xs font-medium text-blue-600">{stats?.weeklyDone || 0}/{stats?.weeklyTarget || 100} visits</span>}
           </div>
           <div className="w-full bg-gray-100 rounded-full h-2.5">
             <div className="bg-blue-600 h-2.5 rounded-full transition-all duration-700" style={{ width: loading ? "0%" : `${weeklyPct}%` }} />
           </div>
           <div className="flex justify-between mt-2">
             <p className="text-xs text-gray-400">{loading ? "..." : `${weeklyPct}% complete`}</p>
-            <p className="text-xs text-gray-400">{loading ? "..." : `${stats.weeklyTarget - stats.weeklyDone} remaining`}</p>
+            <p className="text-xs text-gray-400">{loading ? "..." : `${(stats?.weeklyTarget || 100) - (stats?.weeklyDone || 0)} remaining`}</p>
           </div>
         </div>
 
-        {/* Quick Actions — 6 buttons total (3 rows of 2) */}
+        {/* Quick Actions */}
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Quick Actions</p>
-
         <div className="grid grid-cols-2 gap-3">
-
-          {/* 1 — Start Visit (Imran) */}
-          <button onClick={() => navigate("/visit-shop")}
-            className="bg-blue-600 rounded-2xl p-4 text-left active:scale-95 transition">
+          <button onClick={() => navigate("/visit-shop")} className="bg-blue-600 rounded-2xl p-4 text-left active:scale-95 transition">
             <div className="w-9 h-9 bg-blue-500 rounded-xl flex items-center justify-center mb-3">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-              </svg>
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </div>
             <p className="text-white font-semibold text-sm">Start Visit</p>
             <p className="text-blue-200 text-xs mt-0.5">Log a shop visit</p>
           </button>
 
-          {/* 2 — My Visits (Imran) */}
-          <button onClick={() => navigate("/my-visits")}
-            className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
+          <button onClick={() => navigate("/my-visits")} className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
             <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center mb-3">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-              </svg>
+              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
             </div>
             <p className="text-gray-800 font-semibold text-sm">My Visits</p>
             <p className="text-gray-400 text-xs mt-0.5">View history</p>
           </button>
 
-          {/* 3 — Daily Target (Imran) */}
-          <button onClick={() => navigate("/daily-target")}
-            className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
+          <button onClick={() => navigate("/daily-target")} className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
             <div className="w-9 h-9 bg-green-50 rounded-xl flex items-center justify-center mb-3">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-              </svg>
+              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
             </div>
             <p className="text-gray-800 font-semibold text-sm">Daily Target</p>
             <p className="text-gray-400 text-xs mt-0.5">Track progress</p>
           </button>
 
-          {/* 4 — End of Day (Imran) */}
-          <button onClick={() => navigate("/end-of-day")}
-            className="bg-white rounded-2xl border-2 border-orange-200 p-4 text-left active:scale-95 transition shadow-sm">
+          <button onClick={() => navigate("/end-of-day")} className="bg-white rounded-2xl border-2 border-orange-200 p-4 text-left active:scale-95 transition shadow-sm">
             <div className="w-9 h-9 bg-orange-50 rounded-xl flex items-center justify-center mb-3">
-              <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-              </svg>
+              <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             </div>
             <p className="text-gray-800 font-semibold text-sm">End of Day</p>
             <p className="text-orange-400 text-xs mt-0.5">Send report</p>
           </button>
-
-          {/* 5 — Performance (Naveen) */}
-          <button onClick={() => navigate("/performance")}
-            className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
-            <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center mb-3">
-              <svg className="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-              </svg>
-            </div>
-            <p className="text-gray-800 font-semibold text-sm">Performance</p>
-            <p className="text-gray-400 text-xs mt-0.5">Revenue ledger</p>
-          </button>
-
-          {/* 6 — Follow-ups (Naveen) */}
-          <button onClick={() => navigate("/followups")}
-            className="bg-white rounded-2xl border border-gray-100 p-4 text-left active:scale-95 transition shadow-sm">
-            <div className="w-9 h-9 bg-red-50 rounded-xl flex items-center justify-center mb-3">
-              <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-            </div>
-            <p className="text-gray-800 font-semibold text-sm">Follow-ups</p>
-            <p className="text-gray-400 text-xs mt-0.5">6 pending</p>
-          </button>
-
         </div>
 
         {/* Recent Visits */}
@@ -319,12 +283,15 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+        ) : recentVisits.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400 text-sm">
+            No visits yet. Tap "Start Visit" to log your first visit!
+          </div>
         ) : (
           <div className="space-y-3">
             {recentVisits.map((visit) => <ShopVisitCard key={visit._id} visit={visit} />)}
           </div>
         )}
-
       </div>
     </div>
   );
