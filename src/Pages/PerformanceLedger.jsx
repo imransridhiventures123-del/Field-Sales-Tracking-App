@@ -140,7 +140,7 @@ export default function PerformanceLedger() {
       bg: "bg-orange-50 border border-orange-200",
       textColor: "text-orange-700",
       title: "You're getting there — push harder",
-      msg: `${Math.round(pct)}% covered. You need ₹${fmt(employee.salary - totalRevenue)} more to cover your salary cost. Don't slow down now.`,
+      msg: `${Math.round(pct)}% covered. You need ₹${fmt(employee.salary - totalRevenue)} more to cover your Target cost. Don't slow down now.`,
       barColor: "bg-orange-400",
     };
     if (pct < 100) return {

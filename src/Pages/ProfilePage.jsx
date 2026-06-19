@@ -90,10 +90,10 @@ export default function ProfilePage() {
       <div className="px-4 mt-4">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           {[
-            { label: "Change Password", icon: "🔒" },
-            { label: "App Settings",    icon: "⚙️" },
-            { label: "Help & Support",  icon: "💬" },
-            { label: "About App",       icon: "ℹ️" },
+            { label: "Change Password" },
+            { label: "App Settings" },
+            { label: "Help & Support"},
+            { label: "About App"},
           ].map((item, idx, arr) => (
             <button key={item.label}
               className={`w-full flex items-center gap-3 px-4 py-4 text-sm text-gray-700 active:bg-gray-50 transition text-left ${
@@ -113,7 +113,7 @@ export default function ProfilePage() {
           onClick={handleLogout}
           className="w-full mt-4 py-4 bg-red-50 border border-red-100 text-red-600 font-semibold rounded-2xl active:scale-95 transition text-sm"
         >
-          🚪 Logout
+          Logout
         </button>
       </div>
     </div>
