@@ -1,17 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ShopVisitCard from "../components/ShopVisitCard";
 import TelecallerModal from "../pages/TelecallerModal";
 import { generateVisitPDF, downloadPDF, getPDFBlobUrl } from "../utils/pdfGenerator";
+import { getTodayVisits } from "../api/visitApi";
 
-const TODAY_VISITS = [
-  { _id: "1", shopName: "Annas Provision Store", shopCode: "AP001", ownerName: "Annas", mobile: "9876540001", fieldType: "Field Sales", address: "123 Main Street, Adyar, Chennai - 600020", latitude: 13.0082, longitude: 80.2574, status: "Completed", followUpStatus: "interested", followUp: { status: "interested", date: null }, photos: [1, 2], createdAt: new Date().toISOString() },
-  { _id: "2", shopName: "Big Bazaar", shopCode: "BB001", ownerName: "Ravi Kumar", mobile: "9876540002", fieldType: "Collection", address: "456 Anna Salai, Teynampet, Chennai - 600018", latitude: 13.0418, longitude: 80.2341, status: "Completed", followUpStatus: "callback", followUp: { status: "callback", date: new Date(Date.now() + 86400000).toISOString().split("T")[0] }, photos: [1], createdAt: new Date(Date.now() - 1800000).toISOString() },
-  { _id: "3", shopName: "Sri Murugan Stores", shopCode: "SM001", ownerName: "Murugan", mobile: "9876540003", fieldType: "Field Sales", address: "789 Gandhi Road, T Nagar, Chennai - 600017", latitude: 13.0418, longitude: 80.2341, status: "Completed", followUpStatus: "order_placed", followUp: { status: "order_placed", date: null }, photos: [], createdAt: new Date(Date.now() - 3600000).toISOString() },
-  { _id: "4", shopName: "Kumar Stores", shopCode: "KS001", ownerName: "Suresh Kumar", mobile: "9876540004", fieldType: "Collection", address: "12 West Mambalam, Chennai - 600033", latitude: 13.0339, longitude: 80.2185, status: "Completed", followUpStatus: "payment_due", followUp: { status: "payment_due", date: new Date(Date.now() + 172800000).toISOString().split("T")[0] }, photos: [1], createdAt: new Date(Date.now() - 5400000).toISOString() },
-  { _id: "5", shopName: "Daily Fresh Mart", shopCode: "DF001", ownerName: "Rajan", mobile: "9876540005", fieldType: "Field Sales", address: "55 North Usman Road, T Nagar, Chennai - 600017", latitude: 13.0390, longitude: 80.2300, status: "Completed", followUpStatus: "not_interested", followUp: { status: "not_interested", date: null }, photos: [1, 2], createdAt: new Date(Date.now() - 7200000).toISOString() },
-];
+// CHANGE: Removed the hardcoded TODAY_VISITS dummy array. This page now
+// loads the employee's real visits for today from GET /api/visits/today
+// (same endpoint already used on the Dashboard), and the generated PDF
+// is built from that real data — shop names, GPS, follow-up status, etc.
+// all come straight from the database.
 
 function getSummary(visits) {
   return {
@@ -161,6 +160,10 @@ export default function EndOfDayPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const [visits, setVisits]             = useState([]);
+  const [loadingVisits, setLoadingVisits] = useState(true);
+  const [loadError, setLoadError]       = useState(null);
+
   const [showModal, setShowModal]       = useState(false);
   const [generating, setGenerating]     = useState(false);
   const [sentTo, setSentTo]             = useState(null);
@@ -169,7 +172,28 @@ export default function EndOfDayPage() {
   const [waMessage, setWaMessage]       = useState("");
   const [pdfUrl, setPdfUrl]             = useState(null);
 
-  const summary = getSummary(TODAY_VISITS);
+  // ── FETCH REAL TODAY'S VISITS ──
+  useEffect(() => {
+    let active = true;
+    const fetchVisits = async () => {
+      try {
+        const data = await getTodayVisits();
+        if (!active) return;
+        setVisits(data.visits || []);
+        setLoadError(null);
+      } catch (err) {
+        if (!active) return;
+        console.error("Today's visits fetch error:", err.message);
+        setLoadError("Could not load today's visits. Please try again.");
+      } finally {
+        if (active) setLoadingVisits(false);
+      }
+    };
+    fetchVisits();
+    return () => { active = false; };
+  }, []);
+
+  const summary = getSummary(visits);
   const today   = new Date().toLocaleDateString("en-IN", {
     weekday: "long", day: "numeric", month: "long", year: "numeric"
   });
@@ -179,7 +203,7 @@ export default function EndOfDayPage() {
     setShowModal(false);
     try {
       await new Promise((r) => setTimeout(r, 600));
-      const doc      = generateVisitPDF({ visits: TODAY_VISITS, employee: user, telecaller, date: today });
+      const doc      = generateVisitPDF({ visits, employee: user, telecaller, date: today });
       const filename = `visit-report-${telecaller.name.replace(/\s/g,"-")}-${new Date().toISOString().split("T")[0]}.pdf`;
 
       // Download PDF to device
@@ -252,13 +276,21 @@ export default function EndOfDayPage() {
           { label: "Payment",  value: summary.paymentDue,  color: "text-amber-600"  },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-gray-100 p-3 shadow-sm text-center">
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+            {loadingVisits ? (
+              <div className="h-7 bg-gray-100 rounded animate-pulse mx-auto w-8" />
+            ) : (
+              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+            )}
             <p className="text-[10px] text-gray-400 mt-0.5">{s.label}</p>
           </div>
         ))}
       </div>
 
       <div className="px-4 mt-4 space-y-4">
+
+        {loadError && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-600">{loadError}</div>
+        )}
 
         {/* Success banner */}
         {sentTo && (
@@ -311,11 +343,27 @@ export default function EndOfDayPage() {
 
         {/* Visit list */}
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Today's Visits ({TODAY_VISITS.length})</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Today's Visits ({visits.length})</p>
         </div>
-        <div className="space-y-3">
-          {TODAY_VISITS.map((visit) => <ShopVisitCard key={visit._id} visit={visit} />)}
-        </div>
+
+        {loadingVisits ? (
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 animate-pulse">
+                <div className="h-4 bg-gray-100 rounded w-1/2 mb-2" />
+                <div className="h-3 bg-gray-100 rounded w-1/3" />
+              </div>
+            ))}
+          </div>
+        ) : visits.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400 text-sm">
+            No visits recorded today yet. Log a shop visit first to send an end-of-day report.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {visits.map((visit) => <ShopVisitCard key={visit._id} visit={visit} />)}
+          </div>
+        )}
       </div>
 
       {/* Bottom button */}
@@ -323,7 +371,7 @@ export default function EndOfDayPage() {
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-3">
           <button
             onClick={() => setShowModal(true)}
-            disabled={generating || TODAY_VISITS.length === 0}
+            disabled={generating || loadingVisits || visits.length === 0}
             className="w-full py-4 rounded-2xl text-white font-semibold text-base
               bg-blue-600 hover:bg-blue-700 active:scale-[0.98]
               disabled:opacity-60 disabled:cursor-not-allowed

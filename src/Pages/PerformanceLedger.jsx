@@ -6,6 +6,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { getMyEntries, addEntry as addEntryApi } from "../api/entryApi";
 
 const DEFAULT_PRODUCTS = [
   { id: "batter", name: "Batter", unit: "kg", margin: 3 },
@@ -33,17 +34,24 @@ export default function PerformanceLedger() {
     }
   });
 
-  // No backend model exists yet for ledger entries, so they're kept
-  // per-device in local storage (same pattern as products) instead
-  // of being fake/hardcoded. Starts empty for a real employee.
-  const [entries, setEntries] = useState(() => {
-    try {
-      const saved = localStorage.getItem(`pl_entries_${user?.employeeId || "default"}`);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Real entries from the backend (collections + sales)
+  const [entries, setEntries] = useState([]);
+  const [entriesLoading, setEntriesLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchEntries = async () => {
+      try {
+        const data = await getMyEntries();
+        setEntries(data);
+      } catch (err) {
+        console.error("Entries fetch error:", err.message);
+      } finally {
+        setEntriesLoading(false);
+      }
+    };
+    fetchEntries();
+  }, []);
+
   const [tab, setTab] = useState("overview");
   const [addType, setAddType] = useState("collection");
   const [form, setForm] = useState({ amount: "", productId: DEFAULT_PRODUCTS[0]?.id || "", qty: "", note: "" });
@@ -80,25 +88,29 @@ export default function PerformanceLedger() {
     localStorage.setItem("pl_products", JSON.stringify(products));
   }, [products]);
 
-  useEffect(() => {
-    localStorage.setItem(`pl_entries_${user?.employeeId || "default"}`, JSON.stringify(entries));
-  }, [entries, user?.employeeId]);
-
-  function handleAddEntry() {
+  async function handleAddEntry() {
     setFormError("");
+    let newEntry;
     if (addType === "collection") {
       const amt = parseFloat(form.amount);
       if (!amt || amt <= 0) return setFormError("Enter a valid amount.");
-      setEntries((prev) => [...prev, { type: "collection", amount: amt, note: form.note || "Manual entry" }]);
+      newEntry = { type: "collection", amount: amt, note: form.note || "Manual entry" };
     } else {
       const qty = parseFloat(form.qty);
       if (!form.productId) return setFormError("Select a product.");
       if (!qty || qty <= 0) return setFormError("Enter a valid quantity.");
-      setEntries((prev) => [...prev, { type: "sale", productId: form.productId, qty, note: form.note || "Manual entry" }]);
+      newEntry = { type: "sale", productId: form.productId, qty, note: form.note || "Manual entry" };
     }
-    setForm({ amount: "", productId: products[0]?.id || "", qty: "", note: "" });
-    showToast("Entry added.");
-    setTab("overview");
+
+    try {
+      const saved = await addEntryApi(newEntry);
+      setEntries((prev) => [saved, ...prev]);
+      setForm({ amount: "", productId: products[0]?.id || "", qty: "", note: "" });
+      showToast("Entry added.");
+      setTab("overview");
+    } catch (err) {
+      setFormError(err.response?.data?.message || "Could not save entry. Try again.");
+    }
   }
 
   function handleSaveMargin() {
@@ -288,11 +300,13 @@ export default function PerformanceLedger() {
             <div className="px-4 py-3 border-b border-gray-100">
               <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Collection Log</p>
             </div>
-            {entries.filter((e) => e.type === "collection").length === 0 ? (
+            {entriesLoading ? (
+              <p className="text-xs text-gray-400 text-center py-6">Loading...</p>
+            ) : entries.filter((e) => e.type === "collection").length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-6">No collections yet.</p>
             ) : (
-              entries.filter((e) => e.type === "collection").map((e, i) => (
-                <div key={i} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-0">
+              entries.filter((e) => e.type === "collection").map((e) => (
+                <div key={e._id} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-0">
                   <p className="text-sm text-gray-700">{e.note}</p>
                   <p className="text-sm font-semibold text-blue-600">+₹{fmt(e.amount)}</p>
                 </div>
