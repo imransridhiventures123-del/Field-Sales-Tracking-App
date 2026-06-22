@@ -1,13 +1,18 @@
 // FILE: src/context/LocationContext.jsx
-// PURPOSE: Persistent GPS tracking across all pages.
-// CHANGE: Location tracking was previously inside DashboardPage.jsx so
-// navigating away killed watchPosition and showed "Offline" in admin.
-// Now the tracker lives here — wrapping the entire app — so it keeps
-// sending GPS updates no matter which page is open. The employee only
-// goes offline when they manually tap "Go Offline".
+// OWNER: Imran
+// CHANGE: Two fixes for the "closed app still shows online" problem:
+//   1. On mount: call goOffline() immediately to clear any stale
+//      "online" status left from the previous session (handles app crash,
+//      phone battery death, or force-close without tapping Go Offline).
+//   2. pagehide listener: fires when the browser tab / PWA is fully
+//      closed or put to background on iOS — calls goOffline() so the
+//      backend is updated immediately when the app closes.
+//   Note: navigator.sendBeacon is used in pagehide because normal fetch/
+//   axios is cancelled when the page unloads; sendBeacon survives it.
 
 import { createContext, useContext, useRef, useState, useEffect } from "react";
 import { updateLocation, goOffline } from "../api/locationApi";
+import axiosInstance from "../api/axiosInstance";
 
 const LocationContext = createContext(null);
 
@@ -19,9 +24,35 @@ export function LocationProvider({ children }) {
   const watchIdRef  = useRef(null);
   const intervalRef = useRef(null);
 
-  // Clean up when app unmounts (tab closed)
   useEffect(() => {
+    // ── FIX 1: Reset any stale online status on app open ──────
+    // If the employee closed the app last time without tapping "Go Offline",
+    // the backend still has isOnline: true. Reset it silently on every open.
+    goOffline();
+
+    // ── FIX 2: Mark offline when app / tab is fully closed ────
+    // pagehide fires on iOS Safari (visibilitychange is unreliable there).
+    // sendBeacon survives page unload — regular fetch gets cancelled.
+    const handlePageHide = () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      clearInterval(intervalRef.current);
+      // sendBeacon keeps the request alive after the page dies
+      const token = localStorage.getItem("maavu_token");
+      if (token) {
+        const base = axiosInstance.defaults.baseURL || "";
+        navigator.sendBeacon
+          ? navigator.sendBeacon(`${base}/api/location/offline`)
+          : goOffline(); // fallback for browsers without sendBeacon
+      }
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+
     return () => {
+      window.removeEventListener("pagehide", handlePageHide);
       if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
       clearInterval(intervalRef.current);
     };
@@ -29,7 +60,7 @@ export function LocationProvider({ children }) {
 
   const startTracking = () => {
     if (!navigator.geolocation) { setLocationError("GPS not supported."); return; }
-    if (watchIdRef.current !== null) return; // already tracking
+    if (watchIdRef.current !== null) return;
     setLocationError("");
 
     const id = navigator.geolocation.watchPosition(
@@ -51,8 +82,8 @@ export function LocationProvider({ children }) {
     setIsOnline(true);
     setOnlineSince(new Date());
 
-    // Keep-alive: re-send position every 30s in case watchPosition stalls
-    // (common when phone screen turns off on some Android devices)
+    // Keep-alive ping every 30s — some phones pause watchPosition when
+    // the screen turns off (common on Android battery saver mode)
     clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
       if (watchIdRef.current === null) return;

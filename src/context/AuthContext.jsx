@@ -1,11 +1,11 @@
 // FILE: src/context/AuthContext.jsx
 // OWNER: Imran
-// CHANGE: Added verifyToken() on mount — when the app reopens with a
-// stored token, it silently calls /api/auth/me to confirm the token is
-// still valid and refresh the user object. If valid → stay logged in.
-// If expired/invalid → clear localStorage and go to login.
-// JWT_EXPIRE on Render was extended to 30d so employees stay logged in
-// for a full month without seeing the login screen again.
+// CHANGE: Token verification on mount now distinguishes between:
+//   - HTTP 401 (token genuinely expired/invalid) → clear + go to login
+//   - Network error (Render free tier sleeping, no internet) → keep user
+//     logged in with cached data — do NOT force re-login on a timeout
+// This means employees stay logged in after closing/reopening the app
+// even if the backend takes a few seconds to wake up.
 
 import { createContext, useContext, useState, useEffect } from "react";
 import axiosInstance from "../api/axiosInstance";
@@ -23,32 +23,37 @@ export function AuthProvider({ children }) {
     return localStorage.getItem("maavu_token") || null;
   });
 
-  // true while we verify the stored token on first load
-  const [checking, setChecking] = useState(!!localStorage.getItem("maavu_token"));
+  const [checking, setChecking] = useState(
+    !!localStorage.getItem("maavu_token")
+  );
 
-  // On app open — if we have a stored token, verify it with the backend.
-  // This catches expired tokens silently instead of letting a 401 mid-session
-  // surprise the employee halfway through their work day.
   useEffect(() => {
     const storedToken = localStorage.getItem("maavu_token");
     if (!storedToken) { setChecking(false); return; }
 
     axiosInstance.get("/api/auth/me")
       .then((res) => {
-        // Token valid — refresh stored user data in case admin updated it
         const freshUser = res.data.user || res.data;
         localStorage.setItem("maavu_user", JSON.stringify(freshUser));
         setUser(freshUser);
       })
-      .catch(() => {
-        // Token expired or invalid — clear everything and go to login
-        localStorage.removeItem("maavu_token");
-        localStorage.removeItem("maavu_user");
-        setToken(null);
-        setUser(null);
+      .catch((err) => {
+        // ── KEY FIX ──────────────────────────────────────────────
+        // Only force logout on 401 (token actually expired/invalid).
+        // Network errors (err.response is undefined) mean Render is
+        // still waking up or the device is offline — in that case we
+        // keep the cached user and token so the employee goes straight
+        // to the dashboard, not the login screen.
+        if (err.response?.status === 401) {
+          localStorage.removeItem("maavu_token");
+          localStorage.removeItem("maavu_user");
+          setToken(null);
+          setUser(null);
+        }
+        // any other error (network, 5xx) → stay logged in with cache
       })
       .finally(() => setChecking(false));
-  }, []); // runs once on mount
+  }, []);
 
   const login = (newToken, newUser) => {
     localStorage.setItem("maavu_token", newToken);
@@ -64,8 +69,6 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
-  // Show nothing while we verify the token — prevents a flash of the
-  // login page before the check completes on app open
   if (checking) return null;
 
   return (
