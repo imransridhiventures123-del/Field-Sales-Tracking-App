@@ -376,13 +376,25 @@ export default function FollowUpPage() {
             </div>
             <p className="text-sm font-medium text-gray-400">No follow-ups found</p>
           </div>
-        ) : search.trim() ? (
-          <div className="space-y-2">{filtered.map((f) => renderCard(f))}</div>
+        ) : filter !== "all" ? (
+          // ── FILTERED VIEW (Overdue / Today / Upcoming tab active) ──
+          // Previously this was ignored and all 3 sections always rendered.
+          // Now when a specific tab is selected, only its items show.
+          <div className="space-y-2">
+            {filtered.length === 0 ? (
+              <div className="text-center py-16">
+                <p className="text-sm text-gray-400">No follow-ups in this category.</p>
+              </div>
+            ) : (
+              filtered.map((f) => renderCard(f))
+            )}
+          </div>
         ) : (
+          // ── ALL VIEW — show sections grouped by urgency ──
           <>
-            {renderSection("Overdue", overdue.filter(f => !search || filtered.includes(f)), "bg-red-500")}
-            {renderSection("Due Today", todayList.filter(f => !search || filtered.includes(f)), "bg-amber-500")}
-            {renderSection("Upcoming", upcoming.filter(f => !search || filtered.includes(f)), "bg-blue-500")}
+            {renderSection("Overdue", overdue, "bg-red-500")}
+            {renderSection("Due Today", todayList, "bg-amber-500")}
+            {renderSection("Upcoming", upcoming, "bg-blue-500")}
           </>
         )}
       </div>

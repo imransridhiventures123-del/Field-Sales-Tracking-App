@@ -1,11 +1,13 @@
-// FILE: src/context/AuthContext.jsx
-// OWNER: Imran
-// CHANGE: Token verification on mount now distinguishes between:
-//   - HTTP 401 (token genuinely expired/invalid) → clear + go to login
-//   - Network error (Render free tier sleeping, no internet) → keep user
-//     logged in with cached data — do NOT force re-login on a timeout
-// This means employees stay logged in after closing/reopening the app
-// even if the backend takes a few seconds to wake up.
+// FILE: src/context/AuthContext.jsx — OWNER: Imran
+// CHANGE: Removed the "checking" state that returned null and blocked
+// the entire app while verifying the token with Render.
+// Problem: Render free tier sleeps after 15 min. First request on wakeup
+// takes 30–60s. During that time the app showed a blank screen. Users
+// thought it crashed, reopened, and saw the login page.
+// Fix: Load cached user/token from localStorage IMMEDIATELY (no blank
+// screen, no delay). Verify with /api/auth/me in the background — only
+// redirect to login if the backend explicitly returns 401 (token expired).
+// Network errors / timeouts → stay logged in with cached data.
 
 import { createContext, useContext, useState, useEffect } from "react";
 import axiosInstance from "../api/axiosInstance";
@@ -15,21 +17,20 @@ const AuthContext = createContext();
 export function AuthProvider({ children }) {
 
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem("maavu_user");
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem("maavu_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
   });
 
   const [token, setToken] = useState(() => {
     return localStorage.getItem("maavu_token") || null;
   });
 
-  const [checking, setChecking] = useState(
-    !!localStorage.getItem("maavu_token")
-  );
-
+  // Background token verification — does NOT block rendering
   useEffect(() => {
     const storedToken = localStorage.getItem("maavu_token");
-    if (!storedToken) { setChecking(false); return; }
+    if (!storedToken) return;
 
     axiosInstance.get("/api/auth/me")
       .then((res) => {
@@ -38,21 +39,15 @@ export function AuthProvider({ children }) {
         setUser(freshUser);
       })
       .catch((err) => {
-        // ── KEY FIX ──────────────────────────────────────────────
-        // Only force logout on 401 (token actually expired/invalid).
-        // Network errors (err.response is undefined) mean Render is
-        // still waking up or the device is offline — in that case we
-        // keep the cached user and token so the employee goes straight
-        // to the dashboard, not the login screen.
+        // Only force logout on actual 401 (expired/invalid token).
+        // Network errors, 502 (Render waking up), timeouts → keep logged in.
         if (err.response?.status === 401) {
           localStorage.removeItem("maavu_token");
           localStorage.removeItem("maavu_user");
           setToken(null);
           setUser(null);
         }
-        // any other error (network, 5xx) → stay logged in with cache
-      })
-      .finally(() => setChecking(false));
+      });
   }, []);
 
   const login = (newToken, newUser) => {
@@ -68,8 +63,6 @@ export function AuthProvider({ children }) {
     setToken(null);
     setUser(null);
   };
-
-  if (checking) return null;
 
   return (
     <AuthContext.Provider value={{ user, token, login, logout }}>
