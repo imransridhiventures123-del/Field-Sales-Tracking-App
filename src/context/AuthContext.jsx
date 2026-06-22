@@ -1,21 +1,19 @@
-// ============================================================
-//  FILE: src/context/AuthContext.jsx
-//  OWNER: Imran
-//  PURPOSE: Stores logged-in user info globally.
-//           Every page can read the user and token from here.
-// ============================================================
+// FILE: src/context/AuthContext.jsx
+// OWNER: Imran
+// CHANGE: Added verifyToken() on mount — when the app reopens with a
+// stored token, it silently calls /api/auth/me to confirm the token is
+// still valid and refresh the user object. If valid → stay logged in.
+// If expired/invalid → clear localStorage and go to login.
+// JWT_EXPIRE on Render was extended to 30d so employees stay logged in
+// for a full month without seeing the login screen again.
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
+import axiosInstance from "../api/axiosInstance";
 
-// Step 1: Create the context object
 const AuthContext = createContext();
 
-// Step 2: Create the Provider component
-// Wrap your entire app in this so all pages can access user/token
 export function AuthProvider({ children }) {
 
-  // Try to load existing user from localStorage
-  // so the user stays logged in after page refresh
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("maavu_user");
     return saved ? JSON.parse(saved) : null;
@@ -25,7 +23,33 @@ export function AuthProvider({ children }) {
     return localStorage.getItem("maavu_token") || null;
   });
 
-  // Call this after successful login API response
+  // true while we verify the stored token on first load
+  const [checking, setChecking] = useState(!!localStorage.getItem("maavu_token"));
+
+  // On app open — if we have a stored token, verify it with the backend.
+  // This catches expired tokens silently instead of letting a 401 mid-session
+  // surprise the employee halfway through their work day.
+  useEffect(() => {
+    const storedToken = localStorage.getItem("maavu_token");
+    if (!storedToken) { setChecking(false); return; }
+
+    axiosInstance.get("/api/auth/me")
+      .then((res) => {
+        // Token valid — refresh stored user data in case admin updated it
+        const freshUser = res.data.user || res.data;
+        localStorage.setItem("maavu_user", JSON.stringify(freshUser));
+        setUser(freshUser);
+      })
+      .catch(() => {
+        // Token expired or invalid — clear everything and go to login
+        localStorage.removeItem("maavu_token");
+        localStorage.removeItem("maavu_user");
+        setToken(null);
+        setUser(null);
+      })
+      .finally(() => setChecking(false));
+  }, []); // runs once on mount
+
   const login = (newToken, newUser) => {
     localStorage.setItem("maavu_token", newToken);
     localStorage.setItem("maavu_user", JSON.stringify(newUser));
@@ -33,13 +57,16 @@ export function AuthProvider({ children }) {
     setUser(newUser);
   };
 
-  // Call this when user taps Logout
   const logout = () => {
     localStorage.removeItem("maavu_token");
     localStorage.removeItem("maavu_user");
     setToken(null);
     setUser(null);
   };
+
+  // Show nothing while we verify the token — prevents a flash of the
+  // login page before the check completes on app open
+  if (checking) return null;
 
   return (
     <AuthContext.Provider value={{ user, token, login, logout }}>
@@ -48,8 +75,6 @@ export function AuthProvider({ children }) {
   );
 }
 
-// Step 3: Export a custom hook so pages can easily use the context
-// Usage in any page:  const { user, login, logout } = useAuth();
 export function useAuth() {
   return useContext(AuthContext);
 }

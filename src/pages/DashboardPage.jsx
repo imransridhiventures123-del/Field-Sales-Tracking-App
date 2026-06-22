@@ -1,12 +1,15 @@
 // FILE: src/pages/DashboardPage.jsx
-// CHANGE: Replaced FAKE_STATS and FAKE_RECENT with real API calls
+// CHANGE: Replaced FAKE_STATS and FAKE_RECENT with real API calls.
+// CHANGE: Location tracking now uses LocationContext (persistent across
+// page navigation) instead of local useRef/useState — so the employee
+// stays Online on the admin map even when visiting other pages.
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useLocation } from "../context/LocationContext";
 import ShopVisitCard from "../components/ShopVisitCard";
 import axiosInstance from "../api/axiosInstance";
-import { updateLocation, goOffline } from "../api/locationApi";
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -41,12 +44,13 @@ export default function DashboardPage() {
   const [stats, setStats]               = useState(null);
   const [recentVisits, setRecentVisits] = useState([]);
   const [loading, setLoading]           = useState(true);
-  const [isOnline, setIsOnline]         = useState(false);
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [locationError, setLocationError]     = useState("");
   const [showOfflineModal, setShowOfflineModal] = useState(false);
-  const [onlineSince, setOnlineSince]   = useState(null);
-  const watchIdRef = useRef(null);
+
+  // All location/online state comes from the persistent LocationContext
+  const {
+    isOnline, currentLocation, locationError,
+    startTracking, stopTracking, getOnlineDuration,
+  } = useLocation();
 
   const firstName = user?.name?.split(" ")[0] || "Employee";
   const initials  = user?.name?.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) || "??";
@@ -75,41 +79,7 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    return () => { if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current); };
-  }, []);
-
-  const startTracking = () => {
-    if (!navigator.geolocation) { setLocationError("GPS not supported."); return; }
-    setLocationError("");
-    const id = navigator.geolocation.watchPosition(
-      (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-        setCurrentLocation({ lat: latitude, lng: longitude, accuracy: Math.round(accuracy) });
-        updateLocation(latitude, longitude, Math.round(accuracy)); // sends to backend
-      },
-      () => { setLocationError("Location access denied."); setIsOnline(false); },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-    watchIdRef.current = id;
-    setIsOnline(true);
-    setOnlineSince(new Date());
-  };
-
-  const stopTracking = () => {
-    if (watchIdRef.current) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
-    setIsOnline(false); setCurrentLocation(null); setOnlineSince(null);
-    goOffline(); // tells backend employee is offline
-  };
-
   const handleToggle = () => { isOnline ? setShowOfflineModal(true) : startTracking(); };
-
-  const getOnlineDuration = () => {
-    if (!onlineSince) return "";
-    const ms = Date.now() - onlineSince.getTime();
-    const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
-    return h > 0 ? `${h}h ${m}m online` : `${m}m online`;
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -157,7 +127,7 @@ export default function DashboardPage() {
                     <p className="text-white font-bold text-base">You're Online</p>
                   </div>
                   <p className="text-green-100 text-xs">Sharing live location with manager</p>
-                  {onlineSince && <p className="text-green-200 text-[10px] mt-0.5 font-mono">{getOnlineDuration()}</p>}
+                  {isOnline && <p className="text-green-200 text-[10px] mt-0.5 font-mono">{getOnlineDuration()}</p>}
                   {currentLocation && <p className="text-green-200 text-[10px] mt-0.5">±{currentLocation.accuracy}m accuracy</p>}
                 </>
               ) : (
