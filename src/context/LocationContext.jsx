@@ -25,10 +25,13 @@ export function LocationProvider({ children }) {
   const intervalRef = useRef(null);
 
   useEffect(() => {
-    // ── FIX 1: Reset any stale online status on app open ──────
-    // If the employee closed the app last time without tapping "Go Offline",
-    // the backend still has isOnline: true. Reset it silently on every open.
-    goOffline();
+    // ── FIX 1: Reset stale online status on app open ──────────
+    // Only call if a token exists — i.e. user is actually logged in.
+    // Calling without a token causes a 401 → axios interceptor clears
+    // localStorage → redirects to login → remounts → infinite loop.
+    if (localStorage.getItem("maavu_token")) {
+      goOffline();
+    }
 
     // ── FIX 2: Mark offline when app / tab is fully closed ────
     // pagehide fires on iOS Safari (visibilitychange is unreliable there).
