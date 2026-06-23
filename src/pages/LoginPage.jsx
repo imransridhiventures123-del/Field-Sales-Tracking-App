@@ -2,10 +2,10 @@
 // OWNER: Imran
 // STATUS: REAL API — dummy login removed, real backend connected
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { loginUser } from "../api/authApi"; // ← NOW ACTIVE
+import { loginUser } from "../api/authApi";
 
 export default function LoginPage() {
 
@@ -15,8 +15,16 @@ export default function LoginPage() {
   const [error, setError]               = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const navigate  = useNavigate();
-  const { login } = useAuth();
+  const navigate       = useNavigate();
+  const { login, token } = useAuth();
+
+  // ── ALREADY LOGGED IN CHECK ──────────────────────────────────
+  // Token localStorage mein hai → seedha dashboard bhejo, login mat dikhao
+  useEffect(() => {
+    if (token) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [token, navigate]);
 
   const validate = () => {
     if (!mobile.trim()) { setError("Please enter your mobile number."); return false; }

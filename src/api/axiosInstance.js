@@ -1,10 +1,10 @@
 // FILE: src/api/axiosInstance.js — OWNER: Imran
-// CHANGE: The 401 response interceptor now skips redirect for the
-// background /api/auth/me call. Previously, ANY 401 (including the
-// silent token-verify on app open) would immediately clear localStorage
-// and hard-redirect to login — even if the token just expired by a day.
-// Now: /api/auth/me 401 is handled by AuthContext itself.
-// All other 401s still force logout (correct — e.g. tampered token).
+// CHANGE: 401 error pe ab localStorage remove NAHI hoga.
+// Pehle koi bhi 401 aata toh localStorage clear ho jata aur login pe
+// bhej deta tha — yeh galat tha.
+// Ab: 401 aaye toh sirf error reject karo, localStorage safe rakho.
+// Agar token sach mein expire ho gaya aur employee kuch nahi kar sakta,
+// woh manually logout karega — ya token 90 din baad expire hoga Render pe.
 
 import axios from "axios";
 
@@ -17,7 +17,7 @@ const axiosInstance = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// Attach JWT to every request automatically
+// Har request pe token lagao automatically
 axiosInstance.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("maavu_token");
@@ -27,19 +27,18 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// On 401: skip /api/auth/me (AuthContext handles it).
-// Force logout on all other 401s (real expired/invalid token mid-session).
+// 401 aaye toh SIRF error return karo — localStorage mat chuo.
+// Console mein dikhe ga kahan se aaya error (debug ke liye).
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      const url = error.config?.url || "";
-      const isAuthCheck = url.includes("/api/auth/me") || url.includes("/api/admin/auth/me");
-      if (!isAuthCheck) {
-        localStorage.removeItem("maavu_token");
-        localStorage.removeItem("maavu_user");
-        window.location.href = "/login";
-      }
+      console.warn(
+        "[401] Unauthorized request to:",
+        error.config?.url,
+        "— localStorage safe hai, logout nahi hoga."
+      );
+      // localStorage.removeItem NAHI karo — yahi tha asli masla
     }
     return Promise.reject(error);
   }
