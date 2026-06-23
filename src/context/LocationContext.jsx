@@ -1,23 +1,24 @@
 // FILE: src/context/LocationContext.jsx — OWNER: Imran
-// CHANGES:
-//   1. Location stays ON after app refresh — saves isOnline to localStorage
-//      ("maavu_location_online"). On mount, if the flag is true AND a token
-//      exists → auto-resumes tracking silently. User never has to re-tap.
-//   2. Removed the goOffline() call on mount that was resetting location
-//      every time the page refreshed (this was the root cause of #1 failing).
-//   3. GPS updates sent to backend every 2 seconds (changed from 30s) so
-//      the admin Live Map shows real vehicle-style smooth movement.
-//      watchPosition fires on every GPS change (maximumAge:0). UI state
-//      updates on every GPS event. Backend gets pinged every 2 seconds via
-//      the interval — this balances smooth tracking vs server load.
+//
+// BEHAVIOUR:
+//   - Location sirf tab band hoti hai jab employee manually "Go Offline" tap kare
+//   - Refresh hone pe → auto-resume (localStorage flag survive karta hai)
+//   - App close/reopen pe → auto-resume (localStorage flag survive karta hai)
+//   - App close pe goOffline() nahi call hoti — backend ko offline nahi batate
+//     (employee jab dobara khole, 2-3 sec mein location phir share hogi)
+//
+// LIMITATION (browser ka rule, change nahi ho sakta):
+//   Jab app bilkul band hai (process dead), JavaScript nahi chalta.
+//   GPS ping send nahi ho sakti. Admin ko short gap dikhega.
+//   Yeh sirf native app (Android/iOS) mein possible hai, browser mein nahi.
+//   Lekin app reopen hone pe auto-resume instantly hota hai.
 
 import { createContext, useContext, useRef, useState, useEffect } from "react";
 import { updateLocation, goOffline } from "../api/locationApi";
-import axiosInstance from "../api/axiosInstance";
 
 const LocationContext = createContext(null);
 
-// localStorage key that persists the "online" state across refreshes
+// localStorage use karo — app close ke baad bhi survive karta hai
 const ONLINE_KEY = "maavu_location_online";
 
 export function LocationProvider({ children }) {
@@ -27,9 +28,9 @@ export function LocationProvider({ children }) {
   const [onlineSince, setOnlineSince]         = useState(null);
   const watchIdRef  = useRef(null);
   const intervalRef = useRef(null);
-  const lastPosRef  = useRef(null); // last known position for the 2s ping
+  const lastPosRef  = useRef(null);
 
-  // ── INTERNAL: start the 2-second backend ping ─────────────
+  // ── 2-second backend ping ──────────────────────────────────
   const startPing = () => {
     clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
@@ -38,7 +39,6 @@ export function LocationProvider({ children }) {
         const { lat, lng, accuracy } = lastPosRef.current;
         updateLocation(lat, lng, accuracy);
       } else {
-        // No watchPosition update yet — ask for a fresh position
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             const { latitude, longitude, accuracy } = pos.coords;
@@ -50,13 +50,13 @@ export function LocationProvider({ children }) {
           { enableHighAccuracy: true, timeout: 3000, maximumAge: 2000 }
         );
       }
-    }, 2000); // ping backend every 2 seconds
+    }, 2000);
   };
 
   // ── START TRACKING ─────────────────────────────────────────
   const startTracking = () => {
     if (!navigator.geolocation) { setLocationError("GPS not supported."); return; }
-    if (watchIdRef.current !== null) return;
+    if (watchIdRef.current !== null) return; // pehle se chal raha hai
     setLocationError("");
 
     const id = navigator.geolocation.watchPosition(
@@ -64,7 +64,7 @@ export function LocationProvider({ children }) {
         const { latitude, longitude, accuracy } = pos.coords;
         const loc = { lat: latitude, lng: longitude, accuracy: Math.round(accuracy) };
         lastPosRef.current = loc;
-        setCurrentLocation(loc); // updates UI instantly on every GPS change
+        setCurrentLocation(loc);
       },
       (err) => {
         if (err.code === 1) {
@@ -73,18 +73,16 @@ export function LocationProvider({ children }) {
         }
       },
       { enableHighAccuracy: true, timeout: 3000, maximumAge: 0 }
-      // maximumAge:0 → always fresh GPS, no cached positions
-      // timeout:3000 → try every 3s if GPS is slow
     );
 
     watchIdRef.current = id;
     setIsOnline(true);
     setOnlineSince(new Date());
-    localStorage.setItem(ONLINE_KEY, "true"); // persist across refresh
+    localStorage.setItem(ONLINE_KEY, "true"); // localStorage — app close ke baad bhi rehta hai
     startPing();
   };
 
-  // ── STOP TRACKING ──────────────────────────────────────────
+  // ── STOP TRACKING (sirf manual button pe) ─────────────────
   const stopTracking = () => {
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
@@ -96,46 +94,23 @@ export function LocationProvider({ children }) {
     setIsOnline(false);
     setCurrentLocation(null);
     setOnlineSince(null);
-    localStorage.removeItem(ONLINE_KEY); // clear persistence flag
-    goOffline();
+    localStorage.removeItem(ONLINE_KEY); // flag hata do — manual offline
+    goOffline(); // sirf yahan backend ko batao offline
   };
 
-  // ── ON MOUNT: auto-resume if employee was online before refresh ──
+  // ── ON MOUNT: auto-resume ──────────────────────────────────
   useEffect(() => {
-    const wasOnline   = localStorage.getItem(ONLINE_KEY) === "true";
-    const hasToken    = !!localStorage.getItem("maavu_token");
+    const wasOnline = localStorage.getItem(ONLINE_KEY) === "true";
+    const hasToken  = !!localStorage.getItem("maavu_token");
 
     if (wasOnline && hasToken) {
-      // Employee refreshed the page while tracking — silently resume
+      // Refresh ya app reopen — silently resume karo
       startTracking();
     }
-    // Note: if NOT previously online, do nothing. Employee must manually
-    // tap "Go Online". We do NOT call goOffline() here anymore because
-    // that was resetting tracking on every page refresh.
 
-    // ── App close → mark offline via sendBeacon ────────────────
-    const handlePageHide = () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
-      clearInterval(intervalRef.current);
-      // sendBeacon survives page unload (normal fetch gets cancelled)
-      const token = localStorage.getItem("maavu_token");
-      if (token) {
-        const base = axiosInstance.defaults.baseURL || "";
-        if (navigator.sendBeacon) {
-          navigator.sendBeacon(`${base}/api/location/offline`);
-        }
-        // Remove the persistence flag so app opens as offline next time
-        localStorage.removeItem(ONLINE_KEY);
-      }
-    };
-
-    window.addEventListener("pagehide", handlePageHide);
-
+    // Cleanup jab React component unmount ho (tab close in browser)
+    // NOTE: pagehide pe goOffline() nahi call karte — close pe offline nahi jaana
     return () => {
-      window.removeEventListener("pagehide", handlePageHide);
       if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
       clearInterval(intervalRef.current);
     };
